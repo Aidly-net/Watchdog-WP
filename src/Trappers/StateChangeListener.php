@@ -23,18 +23,45 @@ class StateChangeListener
 
     public function handle_upgrader_complete($upgrader, $hook_extra): void
     {
-        $target = $this->resolve_upgrader_type($upgrader, $hook_extra);
+        $type = $this->resolve_upgrader_type($upgrader, $hook_extra);
+        $target = $type;
+        $details = $hook_extra;
+
+        if ('plugin' === $type) {
+            $plugins = [];
+            if (!empty($hook_extra['plugin']) && is_string($hook_extra['plugin'])) {
+                $plugins[] = $hook_extra['plugin'];
+            } elseif (!empty($hook_extra['plugins']) && is_array($hook_extra['plugins'])) {
+                $plugins = array_filter($hook_extra['plugins'], static function ($plugin): bool {
+                    return is_string($plugin) && '' !== $plugin;
+                });
+            } elseif (is_object($upgrader) && method_exists($upgrader, 'plugin_info')) {
+                $plugin = $upgrader->plugin_info();
+                if (is_string($plugin) && '' !== $plugin) {
+                    $plugins[] = $plugin;
+                }
+            }
+
+            $plugins = array_values(array_unique($plugins));
+            if ($plugins) {
+                $names = array_map([$this, 'resolve_plugin_name'], $plugins);
+                $target = implode(', ', $names);
+                $details['plugin_slug'] = 1 === count($plugins)
+                    ? $this->resolve_plugin_slug($plugins[0])
+                    : array_map([$this, 'resolve_plugin_slug'], $plugins);
+            }
+        }
 
         $payload = $this->build_payload([
-            'action' => $this->resolve_upgrader_action($target),
+            'action' => $this->resolve_upgrader_action($type),
             'target' => $target,
-            'details' => $hook_extra,
+            'details' => $details,
         ]);
 
         $this->dispatch($payload);
     }
 
-    protected function resolve_upgrader_action(string $target): string
+    protected function resolve_upgrader_action(string $type): string
     {
         $actions = [
             'core' => 'core_updated',
@@ -42,7 +69,7 @@ class StateChangeListener
             'theme' => 'theme_updated',
         ];
 
-        return $actions[$target] ?? 'update_completed';
+        return $actions[$type] ?? 'update_completed';
     }
 
     public function handle_plugin_activation(string $plugin): void

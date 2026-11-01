@@ -46,6 +46,11 @@ class StateChangeListenerTest extends TestCase
         $this->assertSame('state_change', $this->payloads[0]['event_type']);
         $this->assertSame($action, $payload['action']);
         $this->assertSame($target, $payload['target']);
+        if (isset($extra['plugin'])) {
+            $this->assertSame('a', $payload['details']['plugin_slug']);
+        } elseif (isset($extra['plugins'])) {
+            $this->assertSame('a', $payload['details']['plugin_slug']);
+        }
     }
 
     public static function upgraderProvider(): array
@@ -54,12 +59,29 @@ class StateChangeListenerTest extends TestCase
             'core' => [['type' => 'core'], 'core_updated', 'core'],
             'plugin by type' => [['type' => 'plugin'], 'plugin_updated', 'plugin'],
             'theme by type' => [['type' => 'theme'], 'theme_updated', 'theme'],
-            'plugin by key' => [['plugin' => 'a/a.php'], 'plugin_updated', 'plugin'],
-            'plugins by key' => [['plugins' => ['a/a.php']], 'plugin_updated', 'plugin'],
+            'plugin by key' => [['plugin' => 'a/a.php'], 'plugin_updated', 'a/a.php'],
+            'plugins by key' => [['plugins' => ['a/a.php']], 'plugin_updated', 'a/a.php'],
             'theme by key' => [['theme' => 'twenty'], 'theme_updated', 'theme'],
             'unknown' => [[], 'update_completed', 'unknown'],
             'unmapped type' => [['type' => 'translation'], 'update_completed', 'translation'],
         ];
+    }
+
+    public function test_plugin_install_uses_upgrader_plugin_info(): void
+    {
+        $upgrader = new class {
+            public function plugin_info(): string
+            {
+                return 'installed-plugin/installed-plugin.php';
+            }
+        };
+
+        $this->listener->handle_upgrader_complete($upgrader, ['type' => 'plugin', 'action' => 'install']);
+
+        $payload = $this->payloads[0]['payload'];
+        $this->assertSame('plugin_updated', $payload['action']);
+        $this->assertSame('installed-plugin/installed-plugin.php', $payload['target']);
+        $this->assertSame('installed-plugin', $payload['details']['plugin_slug']);
     }
 
     public function test_plugin_activation_and_deactivation(): void

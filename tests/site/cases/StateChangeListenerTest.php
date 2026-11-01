@@ -28,8 +28,8 @@ class StateChangeListenerTest extends TestCase
             [['type' => 'core'], 'core_updated', 'core'],
             [['type' => 'plugin'], 'plugin_updated', 'plugin'],
             [['type' => 'theme'], 'theme_updated', 'theme'],
-            [['plugin' => 'a/a.php'], 'plugin_updated', 'plugin'],
-            [['plugins' => ['a/a.php']], 'plugin_updated', 'plugin'],
+            [['plugin' => 'a/a.php'], 'plugin_updated', 'a/a.php'],
+            [['plugins' => ['a/a.php']], 'plugin_updated', 'a/a.php'],
             [['theme' => 'twenty'], 'theme_updated', 'theme'],
             [[], 'update_completed', 'unknown'],
             [['type' => 'translation'], 'update_completed', 'translation'],
@@ -41,8 +41,39 @@ class StateChangeListenerTest extends TestCase
             $this->assert_same('state_change', $payload['event_type']);
             $this->assert_same($case[1], $payload['payload']['action'], 'action for case ' . $index);
             $this->assert_same($case[2], $payload['payload']['target'], 'target for case ' . $index);
-            $this->assert_same($case[0], $payload['payload']['details']);
+            foreach ($case[0] as $key => $value) {
+                $this->assert_same($value, $payload['payload']['details'][$key]);
+            }
         }
+    }
+
+    public function test_plugin_install_uses_upgrader_plugin_info(): void
+    {
+        $upgrader = new class {
+            public function plugin_info(): string
+            {
+                return 'installed-plugin/installed-plugin.php';
+            }
+        };
+
+        $this->listener->handle_upgrader_complete($upgrader, ['type' => 'plugin', 'action' => 'install']);
+
+        $payload = $this->payload()['payload'];
+        $this->assert_same('plugin_updated', $payload['action']);
+        $this->assert_same('installed-plugin/installed-plugin.php', $payload['target']);
+        $this->assert_same('installed-plugin', $payload['details']['plugin_slug']);
+    }
+
+    public function test_plugin_update_reports_the_plugin_name(): void
+    {
+        $plugin = plugin_basename(WEBSITE_WATCHDOG_PATH . 'website-watchdog.php');
+
+        $this->listener->handle_upgrader_complete(null, ['type' => 'plugin', 'plugin' => $plugin]);
+
+        $payload = $this->payload()['payload'];
+        $this->assert_same('plugin_updated', $payload['action']);
+        $this->assert_contains('Website Watchdog', $payload['target']);
+        $this->assert_same(dirname($plugin), $payload['details']['plugin_slug']);
     }
 
     public function test_plugin_activation_resolves_name_and_slug_from_plugin_header(): void
