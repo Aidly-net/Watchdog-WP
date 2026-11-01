@@ -141,8 +141,8 @@ class Settings
 
         echo '<input type="text" id="website_watchdog_api_key" name="website_watchdog_api_key" value="' . esc_attr($value) . '" class="regular-text" />';
         echo '<p class="description">' . esc_html__('Enter the API key provided by Website Watchdog.', 'website-watchdog')
-            . ' <a href="' . esc_url(WEBSITE_WATCHDOG_URL) . '" target="_blank" rel="noopener noreferrer">'
-            . esc_html__('(get one from here)', 'website-watchdog') . '</a></p>';
+            . ' <a href="' . esc_url(WEBSITE_WATCHDOG_URL) . '/settings" target="_blank" rel="noopener noreferrer">'
+            . esc_html__('(Click here to get one)', 'website-watchdog') . '</a></p>';
     }
 
     public function render_verification_notice(): void

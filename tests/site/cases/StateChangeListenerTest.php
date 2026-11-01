@@ -30,7 +30,7 @@ class StateChangeListenerTest extends TestCase
             [['type' => 'theme'], 'theme_updated', 'theme'],
             [['plugin' => 'a/a.php'], 'plugin_updated', 'a/a.php'],
             [['plugins' => ['a/a.php']], 'plugin_updated', 'a/a.php'],
-            [['theme' => 'twenty'], 'theme_updated', 'theme'],
+            [['theme' => 'twenty'], 'theme_updated', wp_get_theme('twenty')->get('Name') ?: 'twenty'],
             [[], 'update_completed', 'unknown'],
             [['type' => 'translation'], 'update_completed', 'translation'],
         ];
@@ -59,7 +59,7 @@ class StateChangeListenerTest extends TestCase
         $this->listener->handle_upgrader_complete($upgrader, ['type' => 'plugin', 'action' => 'install']);
 
         $payload = $this->payload()['payload'];
-        $this->assert_same('plugin_updated', $payload['action']);
+        $this->assert_same('plugin_installed', $payload['action']);
         $this->assert_same('installed-plugin/installed-plugin.php', $payload['target']);
         $this->assert_same('installed-plugin', $payload['details']['plugin_slug']);
     }

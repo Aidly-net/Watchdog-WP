@@ -61,7 +61,8 @@ class StateChangeListenerTest extends TestCase
             'theme by type' => [['type' => 'theme'], 'theme_updated', 'theme'],
             'plugin by key' => [['plugin' => 'a/a.php'], 'plugin_updated', 'a/a.php'],
             'plugins by key' => [['plugins' => ['a/a.php']], 'plugin_updated', 'a/a.php'],
-            'theme by key' => [['theme' => 'twenty'], 'theme_updated', 'theme'],
+            'theme by key' => [['theme' => 'twenty'], 'theme_updated', 'twenty'],
+            'themes by key' => [['themes' => ['a', 'b']], 'theme_updated', 'a, b'],
             'unknown' => [[], 'update_completed', 'unknown'],
             'unmapped type' => [['type' => 'translation'], 'update_completed', 'translation'],
         ];
@@ -79,9 +80,44 @@ class StateChangeListenerTest extends TestCase
         $this->listener->handle_upgrader_complete($upgrader, ['type' => 'plugin', 'action' => 'install']);
 
         $payload = $this->payloads[0]['payload'];
-        $this->assertSame('plugin_updated', $payload['action']);
+        $this->assertSame('plugin_installed', $payload['action']);
         $this->assertSame('installed-plugin/installed-plugin.php', $payload['target']);
         $this->assertSame('installed-plugin', $payload['details']['plugin_slug']);
+    }
+
+    public function test_theme_install_reports_theme_name(): void
+    {
+        $theme = new class {
+            public function get(string $key): string
+            {
+                return 'Twenty Test';
+            }
+
+            public function get_stylesheet(): string
+            {
+                return 'twenty-test';
+            }
+        };
+        $upgrader = new class($theme) {
+            private $theme;
+
+            public function __construct($theme)
+            {
+                $this->theme = $theme;
+            }
+
+            public function theme_info()
+            {
+                return $this->theme;
+            }
+        };
+
+        $this->listener->handle_upgrader_complete($upgrader, ['type' => 'theme', 'action' => 'install']);
+
+        $payload = $this->payloads[0]['payload'];
+        $this->assertSame('theme_installed', $payload['action']);
+        $this->assertSame('Twenty Test', $payload['target']);
+        $this->assertSame('twenty-test', $payload['details']['theme_slug']);
     }
 
     public function test_plugin_activation_and_deactivation(): void
