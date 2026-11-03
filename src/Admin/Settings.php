@@ -4,6 +4,7 @@ namespace WebsiteWatchdog\Agent\Admin;
 
 use WebsiteWatchdog\Agent\Api;
 use WebsiteWatchdog\Agent\Http\Client;
+use WebsiteWatchdog\Agent\Trappers\ErrorTrapper;
 
 class Settings
 {
@@ -31,6 +32,9 @@ class Settings
         add_action('admin_notices', [$this, 'render_verification_notice']);
         add_action('admin_post_website_watchdog_test_event', [$this, 'handle_test_event']);
         add_action('admin_post_website_watchdog_test_incident', [$this, 'handle_test_incident']);
+        add_action('admin_post_website_watchdog_test_error_handler', [$this, 'handle_test_error_handler']);
+        add_action('admin_post_website_watchdog_test_exception_handler', [$this, 'handle_test_exception_handler']);
+        add_action('admin_post_website_watchdog_test_shutdown_handler', [$this, 'handle_test_shutdown_handler']);
         add_action('admin_post_website_watchdog_refresh_incidents', [$this->incidents_view, 'handle_refresh']);
     }
 
@@ -199,6 +203,47 @@ class Settings
         $this->redirect_with_test_result('incident', $sent, $sent ? __('Test incident sent.', 'website-watchdog') : __('Test incident could not be sent.', 'website-watchdog'));
     }
 
+    public function handle_test_error_handler(): void
+    {
+        $this->authorize_test_handler('website_watchdog_test_error_handler_nonce');
+
+        $handled = (new ErrorTrapper())->handle_error(E_ERROR, 'Website Watchdog test: simulated PHP error handler event.', __FILE__, __LINE__);
+        $message = $handled
+            ? __('PHP error handler test triggered. Check your incident history for delivery.', 'website-watchdog')
+            : __('PHP error handler did not handle the simulated error. Check your PHP error reporting configuration.', 'website-watchdog');
+        $this->redirect_with_test_result('error_handler', $handled, $message);
+    }
+
+    public function handle_test_exception_handler(): void
+    {
+        $this->authorize_test_handler('website_watchdog_test_exception_handler_nonce');
+
+        (new ErrorTrapper())->handle_exception(new \RuntimeException('Website Watchdog test: simulated exception handler event.'));
+        $this->redirect_with_test_result('exception_handler', true, __('Exception handler test triggered. Check your incident history for delivery.', 'website-watchdog'));
+    }
+
+    public function handle_test_shutdown_handler(): void
+    {
+        $this->authorize_test_handler('website_watchdog_test_shutdown_handler_nonce');
+
+        (new ErrorTrapper())->handle_shutdown([
+            'type' => E_ERROR,
+            'message' => 'Website Watchdog test: simulated shutdown handler event.',
+            'file' => __FILE__,
+            'line' => __LINE__,
+        ]);
+        $this->redirect_with_test_result('shutdown_handler', true, __('Shutdown handler test triggered. Check your incident history for delivery.', 'website-watchdog'));
+    }
+
+    protected function authorize_test_handler(string $nonce_action): void
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('You do not have sufficient permissions to perform this action.', 'website-watchdog'));
+        }
+
+        check_admin_referer($nonce_action);
+    }
+
     protected function redirect_with_test_result(string $type, bool $success, string $message): void
     {
         $url = add_query_arg([
@@ -260,10 +305,6 @@ class Settings
             <?php wp_nonce_field('website_watchdog_test_incident_nonce'); ?>
             <table class="form-table" role="presentation">
                 <tr>
-                    <th scope="row"><label for="website_watchdog_incident_details"><?php echo esc_html__('Details', 'website-watchdog'); ?></label></th>
-                    <td><textarea id="website_watchdog_incident_details" name="incident_details" rows="3" class="large-text" required></textarea></td>
-                </tr>
-                <tr>
                     <th scope="row"><label for="website_watchdog_incident_severity"><?php echo esc_html__('Severity', 'website-watchdog'); ?></label></th>
                     <td>
                         <select id="website_watchdog_incident_severity" name="incident_severity">
@@ -277,9 +318,32 @@ class Settings
                     <th scope="row"><label for="website_watchdog_incident_source"><?php echo esc_html__('Source', 'website-watchdog'); ?></label></th>
                     <td><input type="text" id="website_watchdog_incident_source" name="incident_source" value="website-watchdog-settings" class="regular-text" /></td>
                 </tr>
+                <tr>
+                    <th scope="row"><label for="website_watchdog_incident_details"><?php echo esc_html__('Details', 'website-watchdog'); ?></label></th>
+                    <td><textarea id="website_watchdog_incident_details" name="incident_details" rows="3" class="large-text" required></textarea></td>
+                </tr>
             </table>
             <?php submit_button(__('Send Test Incident', 'website-watchdog'), 'secondary', 'submit', false); ?>
         </form>
+        <h3><?php echo esc_html__('PHP Error Handlers', 'website-watchdog'); ?></h3>
+        <p><?php echo esc_html__('These tests invoke the handlers with simulated errors and do not cause a real PHP fatal error. Incident delivery requires a verified API key.', 'website-watchdog'); ?></p>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                <input type="hidden" name="action" value="website_watchdog_test_error_handler" />
+                <?php wp_nonce_field('website_watchdog_test_error_handler_nonce'); ?>
+                <?php submit_button(__('Test PHP Error Handler', 'website-watchdog'), 'secondary', 'submit', false); ?>
+            </form>
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                <input type="hidden" name="action" value="website_watchdog_test_exception_handler" />
+                <?php wp_nonce_field('website_watchdog_test_exception_handler_nonce'); ?>
+                <?php submit_button(__('Test Exception Handler', 'website-watchdog'), 'secondary', 'submit', false); ?>
+            </form>
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                <input type="hidden" name="action" value="website_watchdog_test_shutdown_handler" />
+                <?php wp_nonce_field('website_watchdog_test_shutdown_handler_nonce'); ?>
+                <?php submit_button(__('Test Shutdown Handler', 'website-watchdog'), 'secondary', 'submit', false); ?>
+            </form>
+        </div>
     <?php
     }
 

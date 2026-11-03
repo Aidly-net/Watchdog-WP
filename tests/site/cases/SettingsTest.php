@@ -272,12 +272,76 @@ class SettingsTest extends TestCase
 
         $this->assert_contains('value="website_watchdog_test_event"', $out);
         $this->assert_contains('value="website_watchdog_test_incident"', $out);
+        $this->assert_contains('value="website_watchdog_test_error_handler"', $out);
+        $this->assert_contains('value="website_watchdog_test_exception_handler"', $out);
+        $this->assert_contains('value="website_watchdog_test_shutdown_handler"', $out);
         $this->assert_contains('admin-post.php', $out);
-        $this->assert_same(2, substr_count($out, 'name="_wpnonce"'), 'one nonce per form');
+        $this->assert_same(5, substr_count($out, 'name="_wpnonce"'), 'one nonce per form');
         foreach (['info', 'warning', 'error', 'critical'] as $severity) {
             $this->assert_contains('value="' . $severity . '"', $out);
         }
         $this->assert_matches('/<option value="error"[^>]*selected/', $out, 'error should be the default severity');
+    }
+
+    public function test_test_handlers_require_manage_options_and_nonce(): void
+    {
+        $handlers = [
+            ['handle_test_error_handler', 'website_watchdog_test_error_handler_nonce'],
+            ['handle_test_exception_handler', 'website_watchdog_test_exception_handler_nonce'],
+            ['handle_test_shutdown_handler', 'website_watchdog_test_shutdown_handler_nonce'],
+        ];
+
+        foreach ($handlers as [$method, $nonce_action]) {
+            $this->as_visitor();
+            $this->post_with_nonce($nonce_action);
+            $this->expect_die([$this->settings, $method]);
+
+            $this->as_admin();
+            $this->set_request([], []);
+            $this->expect_die([$this->settings, $method]);
+        }
+    }
+
+    public function test_test_error_handler_dispatches_simulated_php_error(): void
+    {
+        $this->as_admin();
+        $this->configure_verified_key();
+        $this->post_with_nonce('website_watchdog_test_error_handler_nonce');
+
+        $redirect = $this->expect_redirect([$this->settings, 'handle_test_error_handler']);
+
+        $this->assert_same('success', $redirect['query']['website_watchdog_test_status']);
+        $payload = $this->last_http_json()['payload'];
+        $this->assert_same('php_error', $payload['error_type']);
+        $this->assert_contains('simulated PHP error handler event', $payload['details']);
+    }
+
+    public function test_test_exception_handler_dispatches_simulated_exception(): void
+    {
+        $this->as_admin();
+        $this->configureVerifiedKey();
+        $this->post_with_nonce('website_watchdog_test_exception_handler_nonce');
+
+        $redirect = $this->expect_redirect([$this->settings, 'handle_test_exception_handler']);
+
+        $this->assert_same('success', $redirect['query']['website_watchdog_test_status']);
+        $payload = $this->last_http_json()['payload'];
+        $this->assert_same('RuntimeException', $payload['error_type']);
+        $this->assert_contains('simulated exception handler event', $payload['details']);
+    }
+
+    public function test_test_shutdown_handler_dispatches_simulated_fatal_error(): void
+    {
+        $this->as_admin();
+        $this->configure_verified_key();
+        $this->post_with_nonce('website_watchdog_test_shutdown_handler_nonce');
+
+        $redirect = $this->expect_redirect([$this->settings, 'handle_test_shutdown_handler']);
+
+        $this->assert_same('success', $redirect['query']['website_watchdog_test_status']);
+        $payload = $this->last_http_json()['payload'];
+        $this->assert_same('php_fatal', $payload['error_type']);
+        $this->assert_contains('simulated shutdown handler event', $payload['details']);
     }
 
     public function test_settings_page_requires_manage_options(): void

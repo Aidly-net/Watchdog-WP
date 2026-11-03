@@ -50,9 +50,9 @@ class ErrorTrapper
         ));
     }
 
-    public function handle_shutdown(): void
+    public function handle_shutdown(?array $error = null): void
     {
-        $error = error_get_last();
+        $error = null === $error ? error_get_last() : $error;
 
         if (!is_array($error)) {
             return;

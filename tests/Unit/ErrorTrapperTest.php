@@ -63,6 +63,22 @@ class ErrorTrapperTest extends TestCase
         $this->trapper->handle_shutdown();
     }
 
+    public function test_shutdown_dispatches_supplied_fatal_error(): void
+    {
+        $this->client->expects($this->once())->method('dispatch')->with($this->callback(function (array $p): bool {
+            return 'php_fatal' === $p['payload']['error_type']
+                && 'simulated fatal' === $p['payload']['details']
+                && 'f.php:12' === $p['payload']['source'];
+        }));
+
+        $this->trapper->handle_shutdown([
+            'type' => E_ERROR,
+            'message' => 'simulated fatal',
+            'file' => 'f.php',
+            'line' => 12,
+        ]);
+    }
+
     public function test_shutdown_ignores_non_fatal_last_error(): void
     {
         @trigger_error('notice only', E_USER_NOTICE);
