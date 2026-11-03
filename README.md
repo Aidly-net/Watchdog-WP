@@ -15,7 +15,9 @@ Website Watchdog is an independent software project operated by Aidly.net.
 - Tracks plugin, theme, and WordPress update-related state changes.
 - Removes sensitive field values and URL query strings before transmission.
 - Queues events locally when the service cannot be reached.
-- Limits the offline queue to 50 events and discards the oldest events first.
+- Limits the offline queue to 50 events or 256 KB, discarding the oldest events first.
+- Caps each event at 32 KB (long strings and lists are truncated) and sends identical incidents at most once per minute.
+- Uses a 2-second delivery timeout and an exponential backoff (30 s up to 1 h) after failed deliveries, so an outage does not slow requests; queued events are retried by cron in batches of 10.
 - Provides an administrator settings page, test event forms, and incident history.
 - Removes plugin options, cached data, queued events, and scheduled hooks on uninstall.
 

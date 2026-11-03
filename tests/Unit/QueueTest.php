@@ -59,7 +59,7 @@ class QueueTest extends TestCase
         };
 
         $this->assertSame([], (new Queue())->flush());
-        $this->assertSame([], WPState::$options[self::KEY]);
+        $this->assertArrayNotHasKey(self::KEY, WPState::$options);
         // 1 verify + 2 deliveries
         $this->assertCount(3, WPState::$remote_calls);
     }
@@ -77,5 +77,67 @@ class QueueTest extends TestCase
         };
 
         $this->assertSame([['n' => 1]], (new Queue())->flush());
+    }
+
+    public function test_flush_skips_network_during_backoff(): void
+    {
+        WPState::$options['website_watchdog_api_key'] = 'k';
+        WPState::$options[self::KEY] = [['n' => 1]];
+        WPState::$transients['website_watchdog_backoff'] = true;
+
+        $this->assertSame([['n' => 1]], (new Queue())->flush());
+        $this->assertSame([], WPState::$remote_calls);
+    }
+
+    public function test_flush_sends_bounded_batch_and_stops_on_first_failure(): void
+    {
+        WPState::$options['website_watchdog_api_key'] = 'k';
+        WPState::$options[self::KEY] = array_map(static function (int $n): array {
+            return ['n' => $n];
+        }, range(1, 25));
+        WPState::$remote_handler = static function (string $url) {
+            return ['response' => ['code' => 200], 'body' => '{"data":{"site_id":"abc"}}'];
+        };
+
+        $remaining = (new Queue())->flush();
+
+        $this->assertCount(15, $remaining);
+        $this->assertSame(['n' => 11], $remaining[0]);
+
+        WPState::$remote_calls = [];
+        WPState::$remote_handler = static function (string $url) {
+            return false !== strpos($url, '/sites/verify')
+                ? ['response' => ['code' => 200], 'body' => '{"data":{"site_id":"abc"}}']
+                : new WP_Error('http', 'fail');
+        };
+
+        $this->assertCount(15, (new Queue())->flush());
+        // 1 verify + 1 failed delivery, then stop.
+        $this->assertCount(2, WPState::$remote_calls);
+        $this->assertNotEmpty(WPState::$transients['website_watchdog_backoff']);
+    }
+
+    public function test_flush_drops_rejected_payloads(): void
+    {
+        WPState::$options['website_watchdog_api_key'] = 'k';
+        WPState::$options[self::KEY] = [['n' => 1]];
+        WPState::$remote_handler = static function (string $url) {
+            return false !== strpos($url, '/sites/verify')
+                ? ['response' => ['code' => 200], 'body' => '{"data":{"site_id":"abc"}}']
+                : ['response' => ['code' => 422], 'body' => ''];
+        };
+
+        $this->assertSame([], (new Queue())->flush());
+    }
+
+    public function test_add_caps_queue_by_bytes(): void
+    {
+        $queue = new Queue();
+        for ($i = 0; $i < 20; $i++) {
+            $queue->add(['blob' => str_repeat('a', 30000)]);
+        }
+
+        $this->assertLessThanOrEqual(262144, strlen(json_encode(WPState::$options[self::KEY])));
+        $this->assertGreaterThan(0, count(WPState::$options[self::KEY]));
     }
 }

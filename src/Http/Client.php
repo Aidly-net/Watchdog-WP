@@ -7,6 +7,14 @@ use WebsiteWatchdog\Agent\Sanitizer;
 
 class Client
 {
+    public const SEND_TIMEOUT = 2;
+    public const VERIFY_TIMEOUT = 3;
+
+    public const RESULT_OK = 'ok';
+    public const RESULT_RETRY = 'retry';
+    public const RESULT_DROP = 'drop';
+    public const RESULT_UNAUTHORIZED = 'unauthorized';
+
     /**
      * Side-effect-free key check against /sites/verify.
      *
@@ -29,7 +37,8 @@ class Client
                 'Content-Type' => 'application/json',
             ],
             'body' => wp_json_encode(['site_url' => home_url()]),
-            'timeout' => 10,
+            'timeout' => self::VERIFY_TIMEOUT,
+            'redirection' => 0,
         ]);
 
         if (is_wp_error($response)) {
@@ -73,9 +82,17 @@ class Client
 
         return $result['valid'];
     }
+
     public function dispatch(array $payload, bool $queue_on_failure = true, string $endpoint = '/' . WEBSITE_WATCHDOG_API_VERSION . '/events/ingest'): bool
     {
-        $sanitized = Sanitizer::clean_payload($payload);
+        $sanitized = PayloadLimiter::limit(Sanitizer::clean_payload($payload));
+        if (null === $sanitized) {
+            return false;
+        }
+
+        if ((new EventDeduper())->is_duplicate($sanitized)) {
+            return false;
+        }
 
         $breaker = new CircuitBreaker();
         if (!$breaker->is_allowed()) {
@@ -96,42 +113,71 @@ class Client
             return false;
         }
 
-        $request_args = [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-            ],
-            'body' => wp_json_encode($sanitized),
-            'timeout' => 10,
-            'blocking' => false,
-        ];
-
-        $response = wp_remote_post(WEBSITE_WATCHDOG_API_URL . $endpoint, $request_args);
-        // Non-blocking requests return no response; a non-error result means the request was sent.
-        if (!is_wp_error($response) && empty($request_args['blocking'])) {
-            return true;
-        }
-
-        $response_code = wp_remote_retrieve_response_code($response);
-
-        if (is_wp_error($response) || 200 > (int) $response_code || 299 < (int) $response_code) {
-            if (401 === (int) $response_code) {
-                update_option('website_watchdog_api_key_verified', false, false);
-                if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
-                    error_log('Unauthorized site API key; event delivery paused.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                }
-
-                return false;
-            }
-
+        // During an outage, skip the network entirely and keep the event for the cron retry.
+        if ((new DeliveryState())->is_backing_off()) {
             if ($queue_on_failure) {
-                $queue = new Queue();
-                $queue->add($sanitized);
+                (new Queue())->add($sanitized);
             }
 
             return false;
         }
 
-        return true;
+        $result = $this->deliver($sanitized, $endpoint);
+
+        if (self::RESULT_RETRY === $result && $queue_on_failure) {
+            (new Queue())->add($sanitized);
+        }
+
+        return self::RESULT_OK === $result;
+    }
+
+    /**
+     * Single blocking delivery attempt with a short timeout; updates backoff state and returns a RESULT_* value.
+     * RESULT_DROP means the backend rejected the payload itself (4xx), so retrying cannot help.
+     */
+    public function deliver(array $payload, string $endpoint = '/' . WEBSITE_WATCHDOG_API_VERSION . '/events/ingest'): string
+    {
+        $state = new DeliveryState();
+
+        $response = wp_remote_post(WEBSITE_WATCHDOG_API_URL . $endpoint, [
+            'headers' => [
+                'Authorization' => 'Bearer ' . get_option('website_watchdog_api_key', ''),
+                'Content-Type' => 'application/json',
+            ],
+            'body' => wp_json_encode($payload),
+            'timeout' => self::SEND_TIMEOUT,
+            'redirection' => 0,
+        ]);
+
+        if (is_wp_error($response)) {
+            $state->record_failure();
+
+            return self::RESULT_RETRY;
+        }
+
+        $code = (int) wp_remote_retrieve_response_code($response);
+
+        if ($code >= 200 && $code <= 299) {
+            $state->record_success();
+
+            return self::RESULT_OK;
+        }
+
+        if (401 === $code) {
+            update_option('website_watchdog_api_key_verified', false, false);
+            if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
+                error_log('Unauthorized site API key; event delivery paused.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
+
+            return self::RESULT_UNAUTHORIZED;
+        }
+
+        if (429 === $code || $code >= 500 || $code < 400) {
+            $state->record_failure();
+
+            return self::RESULT_RETRY;
+        }
+
+        return self::RESULT_DROP;
     }
 }

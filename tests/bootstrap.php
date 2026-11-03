@@ -171,6 +171,13 @@ function set_transient($name, $value, $expiration = 0)
     return true;
 }
 
+function delete_transient($name)
+{
+    unset(WPState::$transients[$name]);
+
+    return true;
+}
+
 function wp_remote_post($url, $args = [])
 {
     WPState::$remote_calls[] = ['url' => $url, 'args' => $args];

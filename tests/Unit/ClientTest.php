@@ -162,6 +162,86 @@ class ClientTest extends TestCase
         $this->assertArrayNotHasKey('website_watchdog_offline_queue', WPState::$options);
     }
 
+    public function test_dispatch_uses_blocking_short_timeout(): void
+    {
+        $this->configureVerifiedKey();
+
+        (new Client())->dispatch(['a' => 1]);
+
+        $args = WPState::$remote_calls[0]['args'];
+        $this->assertSame(Client::SEND_TIMEOUT, $args['timeout']);
+        $this->assertArrayNotHasKey('blocking', $args);
+    }
+
+    public function test_outage_triggers_backoff_and_skips_network(): void
+    {
+        $this->configureVerifiedKey();
+        $this->respond(new WP_Error('http', 'down'));
+
+        $client = new Client();
+        for ($i = 1; $i <= 5; $i++) {
+            $this->assertFalse($client->dispatch(['n' => $i]));
+        }
+
+        $this->assertCount(1, WPState::$remote_calls);
+        $this->assertCount(5, WPState::$options['website_watchdog_offline_queue']);
+        $this->assertNotEmpty(WPState::$transients['website_watchdog_backoff']);
+    }
+
+    public function test_server_error_queues_but_client_error_drops(): void
+    {
+        $this->configureVerifiedKey();
+        $this->respond(['response' => ['code' => 422], 'body' => '']);
+
+        $this->assertFalse((new Client())->dispatch(['a' => 1]));
+        $this->assertArrayNotHasKey('website_watchdog_offline_queue', WPState::$options);
+
+        $this->respond(['response' => ['code' => 503], 'body' => '']);
+
+        $this->assertFalse((new Client())->dispatch(['a' => 2]));
+        $this->assertCount(1, WPState::$options['website_watchdog_offline_queue']);
+    }
+
+    public function test_success_clears_backoff_state(): void
+    {
+        $this->configureVerifiedKey();
+        WPState::$transients['website_watchdog_delivery_failures'] = 3;
+
+        $this->assertTrue((new Client())->dispatch(['a' => 1]));
+        $this->assertArrayNotHasKey('website_watchdog_delivery_failures', WPState::$transients);
+    }
+
+    public function test_repeated_incident_is_sent_once(): void
+    {
+        $this->configureVerifiedKey();
+        $event = ['event_type' => 'incident', 'payload' => ['severity' => 'error', 'source' => 'a.php:1', 'details' => 'boom']];
+
+        $client = new Client();
+        $this->assertTrue($client->dispatch($event));
+        for ($i = 0; $i < 100; $i++) {
+            $this->assertFalse($client->dispatch($event));
+        }
+
+        $this->assertCount(1, WPState::$remote_calls);
+    }
+
+    public function test_oversized_payload_is_truncated_or_dropped(): void
+    {
+        $this->configureVerifiedKey();
+
+        $this->assertTrue((new Client())->dispatch(['details' => str_repeat('a', 100000)]));
+        $this->assertLessThan(5000, strlen(WPState::$remote_calls[0]['args']['body']));
+
+        WPState::$remote_calls = [];
+        $huge = [];
+        for ($i = 0; $i < 50; $i++) {
+            $huge['k' . $i] = array_fill(0, 50, str_repeat('b', 2000));
+        }
+
+        $this->assertFalse((new Client())->dispatch($huge));
+        $this->assertSame([], WPState::$remote_calls);
+    }
+
     public function test_dispatch_blocked_by_circuit_breaker(): void
     {
         $this->configureVerifiedKey();

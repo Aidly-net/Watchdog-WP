@@ -64,6 +64,6 @@ class HeartbeatTest extends TestCase
 
         (new Heartbeat())->run_queue_flush();
 
-        $this->assertSame([], WPState::$options['website_watchdog_offline_queue']);
+        $this->assertArrayNotHasKey('website_watchdog_offline_queue', WPState::$options);
     }
 }

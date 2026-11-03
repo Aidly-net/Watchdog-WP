@@ -19,6 +19,9 @@ function website_watchdog_uninstall(): void
 
     delete_transient('website_watchdog_cached_incidents');
     delete_transient('website_watchdog_js_seen');
+    delete_transient('website_watchdog_backoff');
+    delete_transient('website_watchdog_delivery_failures');
+    delete_transient('website_watchdog_event_seen');
 
     $transient_prefixes = [
         '_transient_website_watchdog_cached_incidents_',
