@@ -15,6 +15,9 @@
 - Payload limit: a new PayloadLimiter.php truncates strings over 2,000 characters and lists over 50 items, and drops anything still over 32 KB.
 - Queue: Queue.php is now capped at 256 KB as well as 50 items. The cron flush skips the network during backoff, sends at most 10 events per run, and stops at the first failure.
 
+## v1.2.0
+- Add plugin update through [PUC](https://github.com/YahnisElsts/plugin-update-checker)
+
 ### Community contributors
 - Special thanks to [PeepSoWP](https://www.reddit.com/user/PeepSoWP/) for valuable feedback and suggestions that helped improve this release.
 

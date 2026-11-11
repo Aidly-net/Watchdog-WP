@@ -40,4 +40,4 @@ When the plugin is uninstalled, its settings, offline queue, cached incident tra
 
 1. Upload the `website-watchdog` folder to the `/wp-content/plugins/` directory (or install directly via the WordPress Plugin Directory).
 2. Activate the plugin through the 'Plugins' menu in WordPress.
-3. Navigate to ** Website Watchdog > Settings** and enter your API key generated from your Website Watchdog dashboard.
+3. Navigate to ** Website Watchdog > Settings** and enter your API key generated from https://wd.aidly.net/settings/api-keys
