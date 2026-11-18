@@ -17,6 +17,8 @@ Website Watchdog is an independent software project operated by Aidly.net.
 - Queues events locally when the service cannot be reached.
 - Limits the offline queue to 50 events or 256 KB, discarding the oldest events first.
 - Caps each event at 32 KB (long strings and lists are truncated) and sends identical incidents at most once per minute.
+- Limits incident source, URL and metadata to 2,002 JSON bytes each, and stack traces to 8,192 JSON bytes. Long traces retain the first 10 and last 5 frames. Incident messages use the remaining event budget.
+- Browser reports that exceed the 16 KiB endpoint limit are trimmed before sending, preserving the first 10 and last 5 stack entries when available.
 - Uses a 2-second delivery timeout and an exponential backoff (30 s up to 1 h) after failed deliveries, so an outage does not slow requests; queued events are retried by cron in batches of 10.
 - Provides an administrator settings page, test event forms, and incident history.
 - Removes plugin options, cached data, queued events, and scheduled hooks on uninstall.
@@ -73,10 +75,8 @@ Use `website_watchdog_capture_event()` for a state change or other noteworthy ev
 website_watchdog_capture_event(
     'subscription_started',
     [
-        'details' => [
-            'plan' => 'starter',
-            'source' => 'checkout',
-        ],
+        'plan' => 'starter',
+        'source' => 'checkout',
     ],
     'customer-account'
 );
@@ -92,11 +92,14 @@ website_watchdog_capture_event(
 ): bool;
 ```
 
-- `$action`: A short identifier for the event.
-- `$details`: Additional event data. Sensitive values are sanitized before
-  transmission.
-- `$target`: An optional system, feature, or component associated with the
-  event.
+- `$action`: A non-empty event identifier, limited to 255 Unicode characters.
+- `$details`: An associative array of additional event data, sent under
+  `payload.details`. Nested arrays and scalar values are supported. Sensitive
+  values are sanitized before transmission. If the encoded event exceeds 32 KiB,
+  only the first details entries that fit are kept and `details.truncated` is
+  set to `true`. The `truncated` key is reserved.
+- `$target`: A required non-empty system, feature, or component associated with
+  the event, limited to 255 Unicode characters.
 
 ### Send a custom alert
 

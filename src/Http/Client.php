@@ -87,6 +87,9 @@ class Client
     {
         $sanitized = PayloadLimiter::limit(Sanitizer::clean_payload($payload));
         if (null === $sanitized) {
+            if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
+                error_log('Event payload could not be encoded or exceeds the size limit.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
             return false;
         }
 

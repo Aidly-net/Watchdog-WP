@@ -16,3 +16,7 @@ Without WP-CLI, add `define('WEBSITE_WATCHDOG_SELFTEST', true);` to `wp-config.p
     php tools/phpunit.phar        # or: composer test
 
 `tests/`, `tools/` and CI files are excluded from release packages via `.distignore`.
+
+## 3. Browser collector tests
+
+    node --test tests/frontend.test.js

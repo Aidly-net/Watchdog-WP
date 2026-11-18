@@ -108,7 +108,7 @@ class JsErrorEndpointTest extends TestCase
         $this->assertSame(200, $this->endpoint->handle_request($request)->get_status());
     }
 
-    public function test_truncates_long_fields(): void
+    public function test_preserves_message_that_fits_event_budget(): void
     {
         $captured = null;
         $this->client->method('dispatch')->willReturnCallback(function (array $payload) use (&$captured) {
@@ -119,6 +119,44 @@ class JsErrorEndpointTest extends TestCase
 
         $this->endpoint->handle_request(new WP_REST_Request(json_encode(['message' => str_repeat('a', 5000)])));
 
-        $this->assertSame(2000, strlen($captured['payload']['details']));
+        $this->assertSame(5000, strlen($captured['payload']['details']));
+    }
+
+    public function test_long_multibyte_message_is_preserved(): void
+    {
+        $captured = null;
+        $this->client->method('dispatch')->willReturnCallback(function (array $payload) use (&$captured) {
+            $captured = $payload;
+
+            return true;
+        });
+        $message = str_repeat('a', 1999) . "\xF0\x9F\x98\x80";
+
+        $this->endpoint->handle_request(new WP_REST_Request(json_encode(['message' => $message])));
+
+        $this->assertNotFalse(wp_json_encode($captured));
+        $this->assertSame($message, $captured['payload']['details']);
+    }
+
+    public function test_truncates_stack_trace_middle_preserving_first_and_last_frames(): void
+    {
+        $captured = null;
+        $this->client->method('dispatch')->willReturnCallback(function (array $payload) use (&$captured) {
+            $captured = $payload;
+
+            return true;
+        });
+
+        $frames = [];
+        for ($index = 1; $index <= 30; $index++) {
+            $frames[] = 'frame-' . $index . '-' . str_repeat('x', 100);
+        }
+
+        $this->endpoint->handle_request(new WP_REST_Request(json_encode(['message' => 'error', 'stack' => implode("\n", $frames)])));
+
+        $this->assertSame(
+            array_merge(array_slice($frames, 0, 10), ['.........'], array_slice($frames, -5)),
+            $captured['payload']['stack_trace']
+        );
     }
 }

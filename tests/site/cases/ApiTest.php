@@ -21,7 +21,7 @@ class ApiTest extends TestCase
         $this->assert_same('website-watchdog', $body['payload']['details']['plugin_slug']);
     }
 
-    public function test_capture_event_merges_details_and_target(): void
+    public function test_capture_event_nests_details_and_target(): void
     {
         $this->configure_verified_key();
 
@@ -29,33 +29,31 @@ class ApiTest extends TestCase
 
         $payload = $this->last_http_json()['payload'];
         $this->assert_same('deploy', $payload['action']);
-        $this->assert_same('2.0', $payload['version']);
+        $this->assert_same('2.0', $payload['details']['version']);
         $this->assert_same('app', $payload['target']);
     }
 
-    public function test_capture_event_without_target(): void
+    public function test_capture_event_requires_target(): void
     {
         $this->configure_verified_key();
 
-        Api::capture_event('deploy');
-
-        $this->assert_array_not_has_key('target', $this->last_http_json()['payload']);
+        $this->assert_false(Api::capture_event('deploy'));
     }
 
     public function test_capture_event_redacts_sensitive_details(): void
     {
         $this->configure_verified_key();
 
-        Api::capture_event('login', ['password' => 'hunter2']);
+        Api::capture_event('login', ['password' => 'hunter2'], 'app');
 
-        $this->assert_same('[REDACTED]', $this->last_http_json()['payload']['password']);
+        $this->assert_same('[REDACTED]', $this->last_http_json()['payload']['details']['password']);
     }
 
     public function test_capture_event_returns_false_without_api_key(): void
     {
         delete_option('website_watchdog_api_key');
 
-        $this->assert_false(Api::capture_event('deploy'));
+        $this->assert_false(Api::capture_event('deploy', [], 'app'));
     }
 
     public function test_capture_incident_posts_to_on_demand_endpoint(): void

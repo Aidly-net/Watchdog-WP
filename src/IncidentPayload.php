@@ -2,12 +2,17 @@
 
 namespace WebsiteWatchdog\Agent;
 
+use WebsiteWatchdog\Agent\Http\PayloadLimiter;
+
 /**
  * Builds incident events in the unified contract shared with on-demand incidents:
  * severity, source and details are required; error_type, url, php_version, wp_version and stack_trace are optional context.
  */
 class IncidentPayload
 {
+    private const MAX_STACK_TRACE_BYTES = 8192;
+    private const MAX_FIELD_JSON_BYTES = 2002;
+
     public static function build(string $severity, string $source, string $details, array $extra = []): array
     {
         $payload = [
@@ -23,10 +28,17 @@ class IncidentPayload
             $payload['error_type'] = (string) $extra['error_type'];
         }
 
+        foreach (['source', 'url', 'error_type', 'php_version', 'wp_version'] as $field) {
+            if (isset($payload[$field])) {
+                $payload[$field] = PayloadLimiter::limit_string($payload[$field], self::MAX_FIELD_JSON_BYTES);
+            }
+        }
+
         $stack_trace = isset($extra['stack_trace']) && is_array($extra['stack_trace']) ? $extra['stack_trace'] : [];
         $stack_trace = array_values(array_filter(array_map('strval', $stack_trace), static function (string $entry): bool {
             return '' !== $entry;
         }));
+        $stack_trace = self::truncate_stack_trace($stack_trace);
         if ($stack_trace) {
             $payload['stack_trace'] = $stack_trace;
         }
@@ -36,6 +48,26 @@ class IncidentPayload
             'timestamp' => gmdate('c'),
             'payload' => Sanitizer::clean_payload($payload),
         ];
+    }
+
+    private static function truncate_stack_trace(array $stack_trace): array
+    {
+        if (count($stack_trace) > 15) {
+            $stack_trace = array_merge(array_slice($stack_trace, 0, 10), ['.........'], array_slice($stack_trace, -5));
+        }
+
+        $frame_count = count($stack_trace);
+        if (0 === $frame_count) {
+            return $stack_trace;
+        }
+
+        $max_frame_bytes = min(self::MAX_FIELD_JSON_BYTES, intdiv(self::MAX_STACK_TRACE_BYTES - $frame_count - 1, $frame_count));
+        foreach ($stack_trace as &$frame) {
+            $frame = PayloadLimiter::limit_string($frame, $max_frame_bytes);
+        }
+        unset($frame);
+
+        return $stack_trace;
     }
 
     /** "path/to/file.php:42", relative to the WordPress root so server paths aren't disclosed. */

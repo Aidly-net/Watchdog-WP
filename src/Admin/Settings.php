@@ -179,7 +179,7 @@ class Settings
             $this->redirect_with_test_result('event', false, __('Action, target, and details are required.', 'website-watchdog'));
         }
 
-        $sent = Api::capture_event($action, ['details' => ['message' => $message]], $target);
+        $sent = Api::capture_event($action, ['message' => $message], $target);
         $this->redirect_with_test_result('event', $sent, $sent ? __('Test event sent.', 'website-watchdog') : __('Test event could not be sent.', 'website-watchdog'));
     }
 

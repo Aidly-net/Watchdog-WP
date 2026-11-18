@@ -126,11 +126,11 @@ class JsErrorEndpointTest extends TestCase
         $this->assert_same(['Error: x', 'at a.js:1:2'], $payload['stack_trace']);
     }
 
-    public function test_long_fields_are_truncated(): void
+    public function test_message_that_fits_is_preserved(): void
     {
         $this->post(['message' => str_repeat('a', 5000)]);
 
-        $this->assert_same(2000, strlen($this->last_http_json()['payload']['details']));
+        $this->assert_same(5000, strlen($this->last_http_json()['payload']['details']));
     }
 
     public function test_handler_works_with_injected_client(): void

@@ -4,7 +4,7 @@
  * Plugin Name: Website Watchdog - PHP Error & Incident Alerts
  * Plugin URI: https://wd.aidly.net/
  * Description: WordPress Agent plugin for Website Watchdog.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: aidly
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -15,7 +15,7 @@
 defined('ABSPATH') || exit;
 
 if (!defined('WEBSITE_WATCHDOG_VERSION')) {
-    define('WEBSITE_WATCHDOG_VERSION', '1.2.0');
+    define('WEBSITE_WATCHDOG_VERSION', '1.3.0');
 }
 
 if (!defined('WEBSITE_WATCHDOG_PATH')) {

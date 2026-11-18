@@ -34,10 +34,13 @@ class Api
             return false;
         }
 
-        $payload = ['action' => $action] + $details;
-
-        if (null !== $target) {
-            $payload['target'] = $target;
+        if ('' === $action || null === $target || '' === $target
+            || array_key_exists('truncated', $details)
+            || !self::valid_event_details($details, true)) {
+            if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
+                error_log('Invalid custom event: action and target are required; details must be an associative array without a truncated key.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
+            return false;
         }
 
         $client = new Client();
@@ -46,8 +49,25 @@ class Api
             'site_id' => get_option('website_watchdog_site_id', ''),
             'event_type' => 'state_change',
             'timestamp' => gmdate('c'),
-            'payload' => $payload,
+            'payload' => [
+                'action' => $action,
+                'target' => $target,
+                'details' => $details,
+            ],
         ]);
+    }
+
+    private static function valid_event_details(array $details, bool $root = false): bool
+    {
+        foreach ($details as $key => $value) {
+            if (($root && !is_string($key))
+                || (is_array($value) && !self::valid_event_details($value))
+                || (!is_array($value) && !is_scalar($value) && null !== $value)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

@@ -18,6 +18,10 @@
 ## v1.2.0
 - Add plugin update through [PUC](https://github.com/YahnisElsts/plugin-update-checker)
 
+## v1.3.0
+- Change custom event payload.
+- Set a limit for each event field to fit the 32KB limit
+
 ### Community contributors
 - Special thanks to [PeepSoWP](https://www.reddit.com/user/PeepSoWP/) for valuable feedback and suggestions that helped improve this release.
 

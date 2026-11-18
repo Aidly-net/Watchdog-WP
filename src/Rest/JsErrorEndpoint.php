@@ -64,9 +64,9 @@ class JsErrorEndpoint
         }
 
         $payload = array_intersect_key($payload, array_flip(self::ALLOWED_FIELDS));
-        foreach (['type', 'message', 'source', 'stack', 'url'] as $field) {
+        foreach (['type', 'message', 'source', 'url'] as $field) {
             if (isset($payload[$field])) {
-                $payload[$field] = is_scalar($payload[$field]) ? substr(sanitize_textarea_field((string) $payload[$field]), 0, 2000) : '';
+                $payload[$field] = is_scalar($payload[$field]) ? sanitize_textarea_field((string) $payload[$field]) : '';
             }
         }
         foreach (['line', 'column'] as $field) {
@@ -94,8 +94,11 @@ class JsErrorEndpoint
         $seen[$fingerprint] = $now;
         set_transient(self::SEEN_KEY, array_slice($seen, -self::MAX_SEEN, null, true), self::DEDUPE_WINDOW);
 
-        $stack_trace = isset($payload['stack']) && '' !== $payload['stack']
-            ? array_slice(array_map('trim', explode("\n", (string) $payload['stack'])), 0, 20)
+        $stack = isset($payload['stack']) && is_scalar($payload['stack'])
+            ? sanitize_textarea_field((string) $payload['stack'])
+            : '';
+        $stack_trace = '' !== $stack
+            ? array_map('trim', explode("\n", $stack))
             : [];
         $location = '' !== $source ? $source . ($line > 0 ? ':' . $line : '') : 'javascript';
 

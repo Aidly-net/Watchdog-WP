@@ -2,6 +2,7 @@
 
 namespace WebsiteWatchdog\Agent\Tests\Unit;
 
+use WebsiteWatchdog\Agent\IncidentPayload;
 use WebsiteWatchdog\Agent\Http\Client;
 use WebsiteWatchdog\Agent\Tests\TestCase;
 use WP_Error;
@@ -240,6 +241,95 @@ class ClientTest extends TestCase
 
         $this->assertFalse((new Client())->dispatch($huge));
         $this->assertSame([], WPState::$remote_calls);
+    }
+
+    public function test_large_stack_trace_is_capped_and_sent(): void
+    {
+        $this->configureVerifiedKey();
+        $frames = array_fill(0, 30, str_repeat('x', 4000));
+        $frames[0] = 'first frame ' . $frames[0];
+        $frames[29] = 'last frame ' . $frames[29];
+        $event = IncidentPayload::build('error', 'test.php:1', 'failure', ['stack_trace' => $frames]);
+
+        $this->assertTrue((new Client())->dispatch($event));
+
+        $sent = json_decode(WPState::$remote_calls[0]['args']['body'], true);
+        $stack_trace = $sent['payload']['stack_trace'];
+        $this->assertCount(16, $stack_trace);
+        $this->assertSame('.........', $stack_trace[10]);
+        $this->assertStringStartsWith('first frame', $stack_trace[0]);
+        $this->assertStringStartsWith('last frame', $stack_trace[15]);
+        $this->assertLessThanOrEqual(8192, strlen(implode("\n", $stack_trace)));
+    }
+
+    public function test_incident_fields_and_stack_are_capped_by_encoded_size(): void
+    {
+        $this->configureVerifiedKey();
+        $emoji = "\xF0\x9F\x98\x80";
+        $frames = array_fill(0, 30, str_repeat($emoji, 136));
+        $event = IncidentPayload::build('error', str_repeat($emoji, 500), str_repeat('\\', 2000), [
+            'url' => str_repeat('"', 2000),
+            'error_type' => str_repeat($emoji, 1000),
+            'stack_trace' => $frames,
+        ]);
+
+        $this->assertTrue((new Client())->dispatch($event));
+
+        $body = WPState::$remote_calls[0]['args']['body'];
+        $this->assertLessThanOrEqual(32768, strlen($body));
+        $sent = json_decode($body, true)['payload'];
+        foreach (['source', 'url', 'error_type'] as $field) {
+            $this->assertLessThanOrEqual(2002, strlen(wp_json_encode($sent[$field])));
+            $this->assertStringEndsWith('...[truncated]', $sent[$field]);
+        }
+        $this->assertSame(str_repeat('\\', 2000), $sent['details']);
+        $this->assertCount(16, $sent['stack_trace']);
+        $this->assertSame('.........', $sent['stack_trace'][10]);
+        $this->assertLessThanOrEqual(8192, strlen(wp_json_encode($sent['stack_trace'])));
+        $this->assertStringEndsWith('...[truncated]', $sent['stack_trace'][0]);
+        $this->assertStringEndsWith('...[truncated]', $sent['stack_trace'][15]);
+    }
+
+    public function test_automatic_state_change_uses_custom_event_limits(): void
+    {
+        $this->configureVerifiedKey();
+        $details = [
+            'first' => str_repeat('a', 5000),
+            'too_large' => str_repeat('"', 20000),
+            'last' => 'not retained',
+        ];
+        $event = [
+            'event_type' => 'state_change',
+            'timestamp' => gmdate('c'),
+            'payload' => ['action' => str_repeat('a', 300), 'target' => str_repeat('é', 300), 'details' => $details],
+        ];
+
+        $this->assertTrue((new Client())->dispatch($event));
+
+        $body = WPState::$remote_calls[0]['args']['body'];
+        $sent = json_decode($body, true)['payload'];
+        $this->assertLessThanOrEqual(32768, strlen($body));
+        $this->assertSame(str_repeat('a', 255), $sent['action']);
+        $this->assertSame(str_repeat('é', 255), $sent['target']);
+        $this->assertSame(['first' => $details['first'], 'truncated' => true], $sent['details']);
+    }
+
+    public function test_automatic_incident_message_uses_remaining_json_budget(): void
+    {
+        $this->configureVerifiedKey();
+        $message = str_repeat("\xF0\x9F\x98\x80", 12000);
+        $event = IncidentPayload::build('error', 'file.php:1', $message, [
+            'stack_trace' => array_fill(0, 20, str_repeat('frame', 150)),
+        ]);
+
+        $this->assertTrue((new Client())->dispatch($event));
+
+        $body = WPState::$remote_calls[0]['args']['body'];
+        $sent = json_decode($body, true)['payload'];
+        $this->assertLessThanOrEqual(32768, strlen($body));
+        $this->assertGreaterThan(2000, strlen($sent['details']));
+        $this->assertStringEndsWith('...[truncated]', $sent['details']);
+        $this->assertSame('.........', $sent['stack_trace'][10]);
     }
 
     public function test_dispatch_blocked_by_circuit_breaker(): void
