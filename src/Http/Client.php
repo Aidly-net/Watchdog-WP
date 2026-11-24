@@ -85,6 +85,10 @@ class Client
 
     public function dispatch(array $payload, bool $queue_on_failure = true, string $endpoint = '/' . WEBSITE_WATCHDOG_API_VERSION . '/events/ingest'): bool
     {
+        if ($this->is_legacy_incident($payload, $endpoint)) {
+            error_log('Website Watchdog blocked a legacy incident payload from leaving the site.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return false;
+        }
         $sanitized = PayloadLimiter::limit(Sanitizer::clean_payload($payload));
         if (null === $sanitized) {
             if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
@@ -140,6 +144,14 @@ class Client
      */
     public function deliver(array $payload, string $endpoint = '/' . WEBSITE_WATCHDOG_API_VERSION . '/events/ingest'): string
     {
+        if ($this->is_legacy_incident($payload, $endpoint)) {
+            error_log('Website Watchdog blocked a legacy incident payload from leaving the site.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return self::RESULT_DROP;
+        }
+        if ('/' . WEBSITE_WATCHDOG_API_VERSION . '/incidents/local' === $endpoint && !$this->is_minimal_incident($payload)) {
+            error_log('Website Watchdog blocked an invalid local incident notification.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return self::RESULT_DROP;
+        }
         $state = new DeliveryState();
 
         $response = wp_remote_post(WEBSITE_WATCHDOG_API_URL . $endpoint, [
@@ -161,6 +173,10 @@ class Client
         $code = (int) wp_remote_retrieve_response_code($response);
 
         if ($code >= 200 && $code <= 299) {
+            if ('/' . WEBSITE_WATCHDOG_API_VERSION . '/incidents/local' === $endpoint && 202 !== $code) {
+                $state->record_failure();
+                return self::RESULT_RETRY;
+            }
             $state->record_success();
 
             return self::RESULT_OK;
@@ -182,5 +198,60 @@ class Client
         }
 
         return self::RESULT_DROP;
+    }
+
+    private function is_legacy_incident(array $payload, string $endpoint): bool
+    {
+        return in_array($payload['event_type'] ?? '', ['incident', 'on_demand_incident'], true)
+            || isset($payload['severity'], $payload['source'], $payload['details'])
+            || false !== strpos($endpoint, '/incidents/on-demand');
+    }
+
+    private function is_minimal_incident(array $payload): bool
+    {
+        $fields = ['event_id', 'local_id', 'revision', 'status', 'mute_future', 'last_seen_at', 'incident_url', 'recent_changes', 'notify'];
+        if (count($payload) !== count($fields) || array_diff(array_keys($payload), $fields)
+            || !is_string($payload['event_id']) || !is_string($payload['local_id'])
+            || !is_int($payload['revision']) || !is_string($payload['status'])
+            || !is_bool($payload['mute_future']) || !is_string($payload['last_seen_at'])
+            || !is_string($payload['incident_url']) || !is_array($payload['recent_changes'])
+            || !is_bool($payload['notify'])) {
+            return false;
+        }
+        $uuid = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+        $timestamp = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/';
+        if (!preg_match($uuid, $payload['event_id']) || !preg_match($uuid, $payload['local_id'])
+            || $payload['revision'] < 1 || !in_array($payload['status'], ['new', 'investigating', 'resolved', 'reopened', 'muted'], true)
+            || !preg_match($timestamp, $payload['last_seen_at']) || count($payload['recent_changes']) > 20) {
+            return false;
+        }
+        $url = wp_parse_url($payload['incident_url']);
+        if (!is_array($url) || !isset($url['scheme'], $url['host'], $url['path'], $url['query'])
+            || !in_array($url['scheme'], ['http', 'https'], true)
+            || isset($url['user']) || isset($url['pass']) || isset($url['fragment'])
+            || substr($url['path'], -19) !== '/wp-admin/admin.php') {
+            return false;
+        }
+        parse_str($url['query'], $query);
+        if (count(explode('&', $url['query'])) !== 3 || count($query) !== 3 || ($query['page'] ?? null) !== 'website-watchdog-settings'
+            || ($query['tab'] ?? null) !== 'incidents' || ($query['incident_id'] ?? null) !== $payload['local_id']) {
+            return false;
+        }
+        foreach ($payload['recent_changes'] as $change) {
+            if (!is_array($change) || array_diff(array_keys($change), ['action', 'target', 'timestamp', 'old_version', 'new_version'])
+                || !isset($change['action'], $change['target'], $change['timestamp'])
+                || !in_array($change['action'], ['plugin_updated', 'plugin_activated', 'plugin_deactivated', 'theme_updated', 'theme_switched'], true)) {
+                return false;
+            }
+            foreach ($change as $value) {
+                if (!is_string($value)) {
+                    return false;
+                }
+            }
+            if (!preg_match($timestamp, $change['timestamp'])) {
+                return false;
+            }
+        }
+        return true;
     }
 }

@@ -3,6 +3,7 @@
 namespace WebsiteWatchdog\Agent\Tests\Unit;
 
 use WebsiteWatchdog\Agent\Http\Client;
+use WebsiteWatchdog\Agent\Local\Store;
 use WebsiteWatchdog\Agent\Rest\JsErrorEndpoint;
 use WebsiteWatchdog\Agent\Tests\TestCase;
 use WP_REST_Request;
@@ -11,6 +12,7 @@ use WPState;
 class JsErrorEndpointTest extends TestCase
 {
     private $client;
+    private $store;
     private $endpoint;
 
     protected function setUp(): void
@@ -18,7 +20,8 @@ class JsErrorEndpointTest extends TestCase
         parent::setUp();
         $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
         $this->client = $this->createMock(Client::class);
-        $this->endpoint = new JsErrorEndpoint($this->client);
+        $this->store = $this->createMock(Store::class);
+        $this->endpoint = new JsErrorEndpoint($this->client, $this->store);
     }
 
     protected function tearDown(): void
@@ -41,7 +44,7 @@ class JsErrorEndpointTest extends TestCase
 
     public function test_rejects_oversized_body(): void
     {
-        $this->client->expects($this->never())->method('dispatch');
+        $this->store->expects($this->never())->method('capture');
 
         $response = $this->endpoint->handle_request(new WP_REST_Request(str_repeat('a', 16385)));
 
@@ -50,14 +53,14 @@ class JsErrorEndpointTest extends TestCase
 
     public function test_rejects_invalid_json(): void
     {
-        $this->client->expects($this->never())->method('dispatch');
+        $this->store->expects($this->never())->method('capture');
 
         $this->assertSame(400, $this->endpoint->handle_request(new WP_REST_Request('not json'))->get_status());
     }
 
     public function test_rate_limits_after_ten_requests(): void
     {
-        $this->client->method('dispatch')->willReturn(true);
+        $this->store->method('capture')->willReturn(true);
         $request = new WP_REST_Request('{"message":"x"}');
 
         for ($i = 0; $i < 10; $i++) {
@@ -70,7 +73,7 @@ class JsErrorEndpointTest extends TestCase
     public function test_forwards_only_allowed_sanitized_fields(): void
     {
         $captured = null;
-        $this->client->expects($this->once())->method('dispatch')->willReturnCallback(function (array $payload) use (&$captured) {
+        $this->store->expects($this->once())->method('capture')->willReturnCallback(function (array $payload) use (&$captured) {
             $captured = $payload;
 
             return true;
@@ -101,17 +104,26 @@ class JsErrorEndpointTest extends TestCase
 
     public function test_repeated_error_is_dispatched_once(): void
     {
-        $this->client->expects($this->once())->method('dispatch')->willReturn(true);
+        $this->store->expects($this->once())->method('capture')->willReturn(true);
         $request = new WP_REST_Request('{"message":"same","source":"a.js","line":1}');
 
         $this->assertSame(200, $this->endpoint->handle_request($request)->get_status());
         $this->assertSame(200, $this->endpoint->handle_request($request)->get_status());
     }
 
+    public function test_failed_capture_is_not_reported_as_success_or_deduplicated(): void
+    {
+        $this->store->expects($this->exactly(2))->method('capture')->willReturn(false);
+        $request = new WP_REST_Request('{"message":"same","source":"a.js","line":1}');
+
+        $this->assertSame(503, $this->endpoint->handle_request($request)->get_status());
+        $this->assertSame(503, $this->endpoint->handle_request($request)->get_status());
+    }
+
     public function test_preserves_message_that_fits_event_budget(): void
     {
         $captured = null;
-        $this->client->method('dispatch')->willReturnCallback(function (array $payload) use (&$captured) {
+        $this->store->method('capture')->willReturnCallback(function (array $payload) use (&$captured) {
             $captured = $payload;
 
             return true;
@@ -125,7 +137,7 @@ class JsErrorEndpointTest extends TestCase
     public function test_long_multibyte_message_is_preserved(): void
     {
         $captured = null;
-        $this->client->method('dispatch')->willReturnCallback(function (array $payload) use (&$captured) {
+        $this->store->method('capture')->willReturnCallback(function (array $payload) use (&$captured) {
             $captured = $payload;
 
             return true;
@@ -141,7 +153,7 @@ class JsErrorEndpointTest extends TestCase
     public function test_truncates_stack_trace_middle_preserving_first_and_last_frames(): void
     {
         $captured = null;
-        $this->client->method('dispatch')->willReturnCallback(function (array $payload) use (&$captured) {
+        $this->store->method('capture')->willReturnCallback(function (array $payload) use (&$captured) {
             $captured = $payload;
 
             return true;

@@ -70,7 +70,7 @@ class QueueTest extends TestCase
         $this->mock_http_response(200, '{"data":{"site_id":"abc"}}');
 
         $this->assert_same([], (new Queue())->flush());
-        $this->assert_same([], get_option(self::KEY));
+        $this->assert_same([], get_option(self::KEY, []));
         $this->assert_count(3, $this->http_calls());
         $this->assert_true((bool) get_option('website_watchdog_api_key_verified'));
     }

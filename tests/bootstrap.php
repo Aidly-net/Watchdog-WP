@@ -13,6 +13,10 @@ define('WEBSITE_WATCHDOG_API_URL', 'https://example.test/api');
 define('WEBSITE_WATCHDOG_API_VERSION', 'v1');
 
 spl_autoload_register(static function (string $class): void {
+    if ('WebsiteWatchdog\\Agent\\Local\\Store' === $class) {
+        require_once __DIR__ . '/stubs/Store.php';
+        return;
+    }
     $map = [
         'WebsiteWatchdog\\Agent\\Tests\\' => __DIR__ . '/',
         'WebsiteWatchdog\\Agent\\' => dirname(__DIR__) . '/src/',
@@ -116,6 +120,8 @@ class WPState
     public static $remote_calls = [];
     /** @var callable|null fn(string $url, array $args): array|WP_Error */
     public static $remote_handler = null;
+    public static $local_changes = [];
+    public static $local_incidents = [];
 
     public static function reset(): void
     {
@@ -127,6 +133,8 @@ class WPState
         self::$routes = [];
         self::$remote_calls = [];
         self::$remote_handler = null;
+        self::$local_changes = [];
+        self::$local_incidents = [];
     }
 }
 
@@ -203,6 +211,11 @@ function wp_remote_retrieve_body($response)
 function wp_json_encode($data, $flags = 0)
 {
     return json_encode($data, $flags);
+}
+
+function wp_parse_url($url)
+{
+    return parse_url($url);
 }
 
 function home_url()

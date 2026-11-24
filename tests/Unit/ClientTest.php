@@ -4,6 +4,7 @@ namespace WebsiteWatchdog\Agent\Tests\Unit;
 
 use WebsiteWatchdog\Agent\IncidentPayload;
 use WebsiteWatchdog\Agent\Http\Client;
+use WebsiteWatchdog\Agent\Http\PayloadLimiter;
 use WebsiteWatchdog\Agent\Tests\TestCase;
 use WP_Error;
 use WPState;
@@ -212,18 +213,47 @@ class ClientTest extends TestCase
         $this->assertArrayNotHasKey('website_watchdog_delivery_failures', WPState::$transients);
     }
 
-    public function test_repeated_incident_is_sent_once(): void
+    public function test_legacy_incident_is_never_transmitted(): void
     {
         $this->configureVerifiedKey();
         $event = ['event_type' => 'incident', 'payload' => ['severity' => 'error', 'source' => 'a.php:1', 'details' => 'boom']];
 
         $client = new Client();
-        $this->assertTrue($client->dispatch($event));
-        for ($i = 0; $i < 100; $i++) {
-            $this->assertFalse($client->dispatch($event));
-        }
+        $this->assertFalse($client->dispatch($event));
+        $this->assertSame(Client::RESULT_DROP, $client->deliver($event));
+        $this->assertSame([], WPState::$remote_calls);
+    }
 
+    public function test_unverified_legacy_incidents_are_not_queued(): void
+    {
+        WPState::$options['website_watchdog_api_key'] = 'k';
+        $event = ['severity' => 'error', 'source' => 'cron', 'details' => 'private-canary'];
+
+        $this->assertFalse((new Client())->dispatch($event, true, '/v1/incidents/on-demand'));
+        $this->assertArrayNotHasKey('website_watchdog_offline_queue', WPState::$options);
+        $this->assertSame([], WPState::$remote_calls);
+    }
+
+    public function test_local_delivery_rejects_diagnostics_at_network_boundary(): void
+    {
+        $id = 'c505e5a5-07e0-4b0d-9d8e-26e044580fc0';
+        $payload = [
+            'event_id' => 'fa83b5df-c9ec-47dc-95fc-ab190da376ca', 'local_id' => $id,
+            'revision' => 1, 'status' => 'new', 'mute_future' => false,
+            'last_seen_at' => '2026-11-25T12:00:00+00:00',
+            'incident_url' => 'https://site.test/wp-admin/admin.php?page=website-watchdog-settings&tab=incidents&incident_id=' . $id,
+            'recent_changes' => [], 'notify' => true,
+        ];
+        $client = new Client();
+        $this->assertSame(Client::RESULT_DROP, $client->deliver($payload + ['details' => 'private-canary'], '/v1/incidents/local'));
+        $bad = $payload;
+        $bad['incident_url'] .= '&page=private-canary';
+        $this->assertSame(Client::RESULT_DROP, $client->deliver($bad, '/v1/incidents/local'));
+        $this->assertSame([], WPState::$remote_calls);
+        $this->assertSame(Client::RESULT_RETRY, $client->deliver($payload, '/v1/incidents/local'));
         $this->assertCount(1, WPState::$remote_calls);
+        $this->respond(['response' => ['code' => 202], 'body' => '{"status":"queued"}']);
+        $this->assertSame(Client::RESULT_OK, $client->deliver($payload, '/v1/incidents/local'));
     }
 
     public function test_oversized_payload_is_truncated_or_dropped(): void
@@ -243,7 +273,7 @@ class ClientTest extends TestCase
         $this->assertSame([], WPState::$remote_calls);
     }
 
-    public function test_large_stack_trace_is_capped_and_sent(): void
+    public function test_large_stack_trace_is_capped(): void
     {
         $this->configureVerifiedKey();
         $frames = array_fill(0, 30, str_repeat('x', 4000));
@@ -251,9 +281,7 @@ class ClientTest extends TestCase
         $frames[29] = 'last frame ' . $frames[29];
         $event = IncidentPayload::build('error', 'test.php:1', 'failure', ['stack_trace' => $frames]);
 
-        $this->assertTrue((new Client())->dispatch($event));
-
-        $sent = json_decode(WPState::$remote_calls[0]['args']['body'], true);
+        $sent = PayloadLimiter::limit($event);
         $stack_trace = $sent['payload']['stack_trace'];
         $this->assertCount(16, $stack_trace);
         $this->assertSame('.........', $stack_trace[10]);
@@ -273,9 +301,7 @@ class ClientTest extends TestCase
             'stack_trace' => $frames,
         ]);
 
-        $this->assertTrue((new Client())->dispatch($event));
-
-        $body = WPState::$remote_calls[0]['args']['body'];
+        $body = wp_json_encode(PayloadLimiter::limit($event));
         $this->assertLessThanOrEqual(32768, strlen($body));
         $sent = json_decode($body, true)['payload'];
         foreach (['source', 'url', 'error_type'] as $field) {
@@ -322,9 +348,7 @@ class ClientTest extends TestCase
             'stack_trace' => array_fill(0, 20, str_repeat('frame', 150)),
         ]);
 
-        $this->assertTrue((new Client())->dispatch($event));
-
-        $body = WPState::$remote_calls[0]['args']['body'];
+        $body = wp_json_encode(PayloadLimiter::limit($event));
         $sent = json_decode($body, true)['payload'];
         $this->assertLessThanOrEqual(32768, strlen($body));
         $this->assertGreaterThan(2000, strlen($sent['details']));

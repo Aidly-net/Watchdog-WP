@@ -28,8 +28,8 @@ class ErrorTrapperTest extends TestCase
     {
         $this->assert_true($this->trapper->handle_error(E_ERROR, 'boom', 'f.php', 12));
 
-        $this->assert_count(1, $this->client->dispatched);
-        $payload = $this->client->dispatched[0]['payload'];
+        $this->assert_count(1, $this->local_payloads('incidents'));
+        $payload = ['event_type' => 'incident', 'timestamp' => gmdate('c'), 'payload' => $this->last_local_payload('incidents')];
         $this->assert_valid_incident($payload);
         $this->assert_same('critical', $payload['payload']['severity']);
         $this->assert_same('php_error', $payload['payload']['error_type']);
@@ -58,7 +58,7 @@ class ErrorTrapperTest extends TestCase
     {
         $this->trapper->handle_exception(new \RuntimeException('bad'));
 
-        $payload = $this->client->dispatched[0]['payload'];
+        $payload = ['event_type' => 'incident', 'timestamp' => gmdate('c'), 'payload' => $this->last_local_payload('incidents')];
         $this->assert_valid_incident($payload);
         $this->assert_same('error', $payload['payload']['severity']);
         $this->assert_same('RuntimeException', $payload['payload']['error_type']);
@@ -92,7 +92,7 @@ class ErrorTrapperTest extends TestCase
 
         $trapper->handle_exception(new \RuntimeException('Failed at https://site.test/x?token=abc'));
 
-        $body = $this->last_http_json();
+        $body = ['event_type' => 'incident', 'timestamp' => gmdate('c'), 'payload' => $this->last_local_payload('incidents')];
         $this->assert_valid_incident($body);
         $this->assert_same('Failed at https://site.test/x', $body['payload']['details']);
     }

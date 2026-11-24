@@ -29,7 +29,7 @@ class JsErrorEndpointTest extends TestCase
 
         $this->assert_status($response, 200);
         $this->assert_true($response->get_data()['ok']);
-        $body = $this->last_http_json();
+        $body = ['event_type' => 'incident', 'timestamp' => gmdate('c'), 'payload' => $this->last_local_payload('incidents')];
         $this->assert_valid_incident($body);
         $this->assert_same('js_error:window.onerror', $body['payload']['error_type']);
         $this->assert_same('Boom', $body['payload']['details']);
@@ -62,7 +62,7 @@ class JsErrorEndpointTest extends TestCase
         ]);
 
         $this->assert_status($response, 200);
-        $this->assert_same('Beacon boom', $this->last_http_json()['payload']['details']);
+        $this->assert_same('Beacon boom', $this->last_local_payload('incidents')['details']);
     }
 
     public function test_rejects_non_object_json_payload(): void
@@ -96,7 +96,7 @@ class JsErrorEndpointTest extends TestCase
             'source' => ['not', 'scalar'],
         ]);
 
-        $payload = $this->last_http_json();
+        $payload = ['event_type' => 'incident', 'timestamp' => gmdate('c'), 'payload' => $this->last_local_payload('incidents')];
         $this->assert_valid_incident($payload);
         $payload = $payload['payload'];
         $this->assert_array_not_has_key('evil', $payload);
@@ -114,14 +114,15 @@ class JsErrorEndpointTest extends TestCase
         $this->assert_status($first, 200);
         $this->assert_status($second, 200);
         $this->assert_status($other, 200);
-        $this->assert_count(2, $this->http_calls());
+        $this->assert_count(2, $this->local_payloads('incidents'));
+        $this->assert_count(0, $this->http_calls());
     }
 
     public function test_page_url_and_stack_are_forwarded(): void
     {
         $this->post(['message' => 'with context', 'url' => 'https://site.test/checkout/?token=1', 'stack' => "Error: x\n    at a.js:1:2"]);
 
-        $payload = $this->last_http_json()['payload'];
+        $payload = $this->last_local_payload('incidents');
         $this->assert_same('https://site.test/checkout/', $payload['url']);
         $this->assert_same(['Error: x', 'at a.js:1:2'], $payload['stack_trace']);
     }
@@ -130,7 +131,7 @@ class JsErrorEndpointTest extends TestCase
     {
         $this->post(['message' => str_repeat('a', 5000)]);
 
-        $this->assert_same(5000, strlen($this->last_http_json()['payload']['details']));
+        $this->assert_same(5000, strlen($this->last_local_payload('incidents')['details']));
     }
 
     public function test_handler_works_with_injected_client(): void
@@ -144,7 +145,7 @@ class JsErrorEndpointTest extends TestCase
         $response = $endpoint->handle_request($request);
 
         $this->assert_status($response, 200);
-        $this->assert_count(1, $client->dispatched);
-        $this->assert_same('injected', $client->dispatched[0]['payload']['payload']['details']);
+        $this->assert_count(0, $client->dispatched);
+        $this->assert_same('injected', $this->last_local_payload('incidents')['details']);
     }
 }

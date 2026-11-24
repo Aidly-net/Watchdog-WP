@@ -85,6 +85,16 @@ class StateChangeListenerTest extends TestCase
         $this->assertSame('installed-plugin', $payload['details']['plugin_slug']);
     }
 
+    public function test_upgrader_includes_versions_when_available(): void
+    {
+        $this->listener->handle_upgrader_complete(null, [
+            'type' => 'plugin', 'plugin' => 'a/a.php', 'old_version' => '1.0', 'new_version' => '2.0',
+        ]);
+        $this->assertSame('1.0', $this->payloads[0]['payload']['old_version']);
+        $this->assertSame('2.0', $this->payloads[0]['payload']['new_version']);
+        $this->assertTrue(WPState::$local_changes[0]['shareable']);
+    }
+
     public function test_theme_install_reports_theme_name(): void
     {
         $theme = new class {

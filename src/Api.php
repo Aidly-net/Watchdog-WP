@@ -3,6 +3,7 @@
 namespace WebsiteWatchdog\Agent;
 
 use WebsiteWatchdog\Agent\Http\Client;
+use WebsiteWatchdog\Agent\Local\Store;
 
 class Api
 {
@@ -12,8 +13,7 @@ class Api
             return;
         }
 
-        $client = new Client();
-        $client->dispatch([
+        $event = [
             'site_id' => get_option('website_watchdog_site_id', ''),
             'event_type' => 'state_change',
             'timestamp' => gmdate('c'),
@@ -22,7 +22,11 @@ class Api
                 'target' => 'Website Watchdog',
                 'details' => ['plugin_slug' => 'website-watchdog'],
             ],
-        ]);
+        ];
+        if (!(new Store())->record_change($event, true)) {
+            error_log('Website Watchdog could not record a local state change.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        }
+        (new Client())->dispatch($event);
     }
 
     /**
@@ -43,10 +47,7 @@ class Api
             return false;
         }
 
-        $client = new Client();
-
-        return $client->dispatch([
-            'site_id' => get_option('website_watchdog_site_id', ''),
+        return (new Store())->record_change([
             'event_type' => 'state_change',
             'timestamp' => gmdate('c'),
             'payload' => [
@@ -83,14 +84,6 @@ class Api
             $severity = 'info';
         }
 
-        $client = new Client();
-
-        return $client->dispatch([
-            'site_id' => get_option('website_watchdog_site_id', ''),
-            'timestamp' => gmdate('c'),
-            'source' => $source ?? 'on_demand',
-            'severity' => $severity,
-            'details' => $details,
-        ], true, '/' . WEBSITE_WATCHDOG_API_VERSION . '/incidents/on-demand');
+        return (new Store())->capture(IncidentPayload::build($severity, $source ?? 'on_demand', $details));
     }
 }

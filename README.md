@@ -3,8 +3,8 @@
 Website Watchdog is a lightweight WordPress monitoring agent for independent
 developers and site owners. It captures PHP fatal errors, unhandled
 exceptions, browser JavaScript errors, and important WordPress state changes,
-then sends sanitized telemetry to the Website Watchdog service for incident
-grouping and decision-support alerts.
+groups and correlates incidents locally, and sends minimal notifications to
+the Website Watchdog service for alert delivery.
 
 Website Watchdog is an independent software project operated by Aidly.net.
 
@@ -16,12 +16,12 @@ Website Watchdog is an independent software project operated by Aidly.net.
 - Removes sensitive field values and URL query strings before transmission.
 - Queues events locally when the service cannot be reached.
 - Limits the offline queue to 50 events or 256 KB, discarding the oldest events first.
-- Caps each event at 32 KB (long strings and lists are truncated) and sends identical incidents at most once per minute.
+- Caps outgoing state events at 32 KB; incidents are grouped locally.
 - Limits incident source, URL and metadata to 2,002 JSON bytes each, and stack traces to 8,192 JSON bytes. Long traces retain the first 10 and last 5 frames. Incident messages use the remaining event budget.
 - Browser reports that exceed the 16 KiB endpoint limit are trimmed before sending, preserving the first 10 and last 5 stack entries when available.
 - Uses a 2-second delivery timeout and an exponential backoff (30 s up to 1 h) after failed deliveries, so an outage does not slow requests; queued events are retried by cron in batches of 10.
 - Provides an administrator settings page, test event forms, and incident history.
-- Removes plugin options, cached data, queued events, and scheduled hooks on uninstall.
+- Retains incidents for 30 days after last seen and changes for 30 days; removes local data on uninstall.
 
 ## Requirements
 
@@ -49,16 +49,21 @@ The public service pages are available at:
 
 ## Data and privacy
 
-The agent transmits error messages, file names, line numbers, sanitized stack
-traces, WordPress/PHP version information, plugin and theme state changes, and
-URLs associated with captured errors. Query strings are removed from URLs
-locally before transmission.
+Incident messages, sources, URLs, traces and custom event details stay in
+WordPress. New or reopened incidents send a generic notification, an
+administrator-only WordPress link, and up to 20 recent plugin/theme changes
+(names, actions, timestamps and available versions). SaaS also receives
+opaque IDs, revisions and status needed for synchronization. Plugin/theme
+installations and core updates continue to be sent in the separate state-change
+feed, along with WordPress/PHP versions in heartbeats. Plugin and theme names
+and versions may reveal installed software.
 
-Passwords, authentication tokens, API keys, secrets, raw POST data, and other
-values whose field names appear sensitive are redacted locally where detected.
-Error messages and custom event details can still contain sensitive content if
-the originating site puts it there, so review your site’s data before enabling
-telemetry.
+WordPress remains authoritative for status. Portal actions require the site's
+public HTTPS REST endpoint and a trusted certificate. WordPress-to-SaaS
+updates use WP-Cron, which can be delayed; an expired local incident link
+reports that the incident is unavailable. Existing historical SaaS incidents
+are not deleted. The administrator link must have the same origin as the
+registered site URL. Legacy incident endpoints are disabled.
 
 See the [Privacy Policy](https://wd.aidly.net/privacy) for more information.
 
@@ -92,14 +97,11 @@ website_watchdog_capture_event(
 ): bool;
 ```
 
-- `$action`: A non-empty event identifier, limited to 255 Unicode characters.
-- `$details`: An associative array of additional event data, sent under
-  `payload.details`. Nested arrays and scalar values are supported. Sensitive
-  values are sanitized before transmission. If the encoded event exceeds 32 KiB,
-  only the first details entries that fit are kept and `details.truncated` is
-  set to `true`. The `truncated` key is reserved.
-- `$target`: A required non-empty system, feature, or component associated with
-  the event, limited to 255 Unicode characters.
+- `$action`: A non-empty event identifier.
+- `$details`: An associative array stored locally. Nested arrays and scalar
+  values are supported; sensitive field names are redacted. The `truncated`
+  key is reserved.
+- `$target`: A required non-empty system, feature, or component.
 
 ### Send a custom alert
 
@@ -128,9 +130,9 @@ website_watchdog_capture_incident(
 - `$severity`: `info`, `warning`, `error`, or `critical`.
 - `$source`: An optional plugin, component, or integration identifier.
 
-Both functions return `true` when the event is accepted for delivery and
-`false` when the API key is unavailable, unverified, rate-limited, or delivery
-fails. They are available after the plugin has loaded, so call them from
+Both functions return `true` when the event is stored locally, including when
+no API key is configured; `false` indicates invalid input or storage failure.
+They are available after the plugin has loaded, so call them from
 WordPress hooks or later application code rather than before plugin loading.
 
 ## License

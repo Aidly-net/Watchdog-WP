@@ -20,6 +20,7 @@ class Heartbeat
 
         add_action('website_watchdog_retry_queue', [$this, 'run_queue_flush']);
         add_action('website_watchdog_heartbeat', [$this, 'send_ping']);
+        add_action('website_watchdog_flush_local', [$this, 'flush_local']);
     }
 
     public function register_schedule(array $schedules): array
@@ -38,6 +39,14 @@ class Heartbeat
     {
         $queue = new \WebsiteWatchdog\Agent\Http\Queue();
         $queue->flush();
+        $store = new \WebsiteWatchdog\Agent\Local\Store();
+        $store->cleanup();
+        $store->flush_outbox();
+    }
+
+    public function flush_local(): void
+    {
+        (new \WebsiteWatchdog\Agent\Local\Store())->flush_outbox();
     }
 
     public function send_ping(): void

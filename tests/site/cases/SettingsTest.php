@@ -311,7 +311,7 @@ class SettingsTest extends TestCase
         $redirect = $this->expect_redirect([$this->settings, 'handle_test_error_handler']);
 
         $this->assert_same('success', $redirect['query']['website_watchdog_test_status']);
-        $payload = $this->last_http_json()['payload'];
+        $payload = $this->last_local_payload('incidents');
         $this->assert_same('php_error', $payload['error_type']);
         $this->assert_contains('simulated PHP error handler event', $payload['details']);
     }
@@ -319,13 +319,13 @@ class SettingsTest extends TestCase
     public function test_test_exception_handler_dispatches_simulated_exception(): void
     {
         $this->as_admin();
-        $this->configureVerifiedKey();
+        $this->configure_verified_key();
         $this->post_with_nonce('website_watchdog_test_exception_handler_nonce');
 
         $redirect = $this->expect_redirect([$this->settings, 'handle_test_exception_handler']);
 
         $this->assert_same('success', $redirect['query']['website_watchdog_test_status']);
-        $payload = $this->last_http_json()['payload'];
+        $payload = $this->last_local_payload('incidents');
         $this->assert_same('RuntimeException', $payload['error_type']);
         $this->assert_contains('simulated exception handler event', $payload['details']);
     }
@@ -339,7 +339,7 @@ class SettingsTest extends TestCase
         $redirect = $this->expect_redirect([$this->settings, 'handle_test_shutdown_handler']);
 
         $this->assert_same('success', $redirect['query']['website_watchdog_test_status']);
-        $payload = $this->last_http_json()['payload'];
+        $payload = $this->last_local_payload('incidents');
         $this->assert_same('php_fatal', $payload['error_type']);
         $this->assert_contains('simulated shutdown handler event', $payload['details']);
     }
@@ -470,7 +470,7 @@ class SettingsTest extends TestCase
         $redirect = $this->expect_redirect([$this->settings, 'handle_test_event']);
 
         $this->assert_same('success', $redirect['query']['website_watchdog_test_status']);
-        $payload = $this->last_http_json()['payload'];
+        $payload = $this->last_local_payload('changes');
         $this->assert_same('deploydone', $payload['action']);
         $this->assert_same('Production', $payload['target']);
         $this->assert_same('Release 2.0', $payload['details']['message']);
@@ -484,7 +484,7 @@ class SettingsTest extends TestCase
 
         $redirect = $this->expect_redirect([$this->settings, 'handle_test_event']);
 
-        $this->assert_same('error', $redirect['query']['website_watchdog_test_status']);
+        $this->assert_same('success', $redirect['query']['website_watchdog_test_status']);
     }
 
     public function test_test_incident_requires_manage_options_and_nonce(): void
@@ -525,7 +525,7 @@ class SettingsTest extends TestCase
         $redirect = $this->expect_redirect([$this->settings, 'handle_test_incident']);
 
         $this->assert_same('success', $redirect['query']['website_watchdog_test_status']);
-        $body = $this->last_http_json();
+        $body = $this->last_local_payload('incidents');
         $this->assert_same('Disk almost full', $body['details']);
         $this->assert_same('critical', $body['severity']);
         $this->assert_same('monitor', $body['source']);
@@ -539,7 +539,7 @@ class SettingsTest extends TestCase
 
         $this->expect_redirect([$this->settings, 'handle_test_incident']);
 
-        $body = $this->last_http_json();
+        $body = $this->last_local_payload('incidents');
         $this->assert_same('info', $body['severity']);
         $this->assert_same('on_demand', $body['source']);
     }

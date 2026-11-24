@@ -6,6 +6,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WebsiteWatchdog\Agent\Http\Client;
 use WebsiteWatchdog\Agent\IncidentPayload;
+use WebsiteWatchdog\Agent\Local\Store;
 
 class JsErrorEndpoint
 {
@@ -18,10 +19,12 @@ class JsErrorEndpoint
     private const MAX_SEEN = 100;
 
     protected $http_client;
+    protected $store;
 
-    public function __construct(?Client $http_client = null)
+    public function __construct(?Client $http_client = null, ?Store $store = null)
     {
         $this->http_client = $http_client ?: new Client();
+        $this->store = $store ?: new Store();
     }
 
     public function register(): void
@@ -91,9 +94,6 @@ class JsErrorEndpoint
         if (isset($seen[$fingerprint])) {
             return new WP_REST_Response(['ok' => true, 'duplicate' => true], 200);
         }
-        $seen[$fingerprint] = $now;
-        set_transient(self::SEEN_KEY, array_slice($seen, -self::MAX_SEEN, null, true), self::DEDUPE_WINDOW);
-
         $stack = isset($payload['stack']) && is_scalar($payload['stack'])
             ? sanitize_textarea_field((string) $payload['stack'])
             : '';
@@ -102,12 +102,17 @@ class JsErrorEndpoint
             : [];
         $location = '' !== $source ? $source . ($line > 0 ? ':' . $line : '') : 'javascript';
 
-        $this->http_client->dispatch(IncidentPayload::build('warning', $location, $message, [
+        $sent = $this->store->capture(IncidentPayload::build('warning', $location, $message, [
             'error_type' => isset($payload['type']) && '' !== $payload['type'] ? 'js_error:' . $payload['type'] : 'js_error',
             'stack_trace' => $stack_trace,
             'url' => isset($payload['url']) ? (string) $payload['url'] : '',
         ]));
 
+        if (!$sent) {
+            return new WP_REST_Response(['ok' => false, 'error' => 'Incident reporting is unavailable.'], 503);
+        }
+        $seen[$fingerprint] = $now;
+        set_transient(self::SEEN_KEY, array_slice($seen, -self::MAX_SEEN, null, true), self::DEDUPE_WINDOW);
         return new WP_REST_Response(['ok' => true], 200);
     }
 }

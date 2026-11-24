@@ -3,14 +3,17 @@
 namespace WebsiteWatchdog\Agent\Trappers;
 
 use WebsiteWatchdog\Agent\Http\Client;
+use WebsiteWatchdog\Agent\Local\Store;
 
 class StateChangeListener
 {
     protected $http_client;
+    protected $store;
 
-    public function __construct(?Client $http_client = null)
+    public function __construct(?Client $http_client = null, ?Store $store = null)
     {
         $this->http_client = $http_client ?: new Client();
+        $this->store = $store ?: new Store();
     }
 
     public function register(): void
@@ -76,11 +79,17 @@ class StateChangeListener
             }
         }
 
-        $payload = $this->build_payload([
+        $context = [
             'action' => $this->resolve_upgrader_action($type, $installed),
             'target' => $target,
             'details' => $details,
-        ]);
+        ];
+        foreach (['old_version', 'new_version'] as $field) {
+            if (isset($hook_extra[$field]) && is_string($hook_extra[$field]) && '' !== $hook_extra[$field]) {
+                $context[$field] = $hook_extra[$field];
+            }
+        }
+        $payload = $this->build_payload($context);
 
         $this->dispatch($payload);
     }
@@ -180,6 +189,9 @@ class StateChangeListener
 
     protected function dispatch(array $payload): void
     {
+        if (!$this->store->record_change($payload, true)) {
+            error_log('Website Watchdog could not record a local state change.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        }
         $this->http_client->dispatch($payload);
     }
 }

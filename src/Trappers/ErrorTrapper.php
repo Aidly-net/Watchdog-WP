@@ -5,15 +5,18 @@ namespace WebsiteWatchdog\Agent\Trappers;
 use Throwable;
 use WebsiteWatchdog\Agent\Http\Client;
 use WebsiteWatchdog\Agent\IncidentPayload;
+use WebsiteWatchdog\Agent\Local\Store;
 
 class ErrorTrapper
 {
     protected $http_client;
+    protected $store;
     protected $fatal_types = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR];
 
-    public function __construct(?Client $http_client = null)
+    public function __construct(?Client $http_client = null, ?Store $store = null)
     {
         $this->http_client = $http_client ?: new Client();
+        $this->store = $store ?: new Store();
     }
 
     public function register(): void
@@ -35,9 +38,7 @@ class ErrorTrapper
             return false;
         }
 
-        $this->dispatch(IncidentPayload::build('critical', IncidentPayload::location($file, $line), $message, ['error_type' => 'php_error']));
-
-        return true;
+        return $this->dispatch(IncidentPayload::build('critical', IncidentPayload::location($file, $line), $message, ['error_type' => 'php_error']));
     }
 
     public function handle_exception(Throwable $exception): void
@@ -70,8 +71,8 @@ class ErrorTrapper
         ));
     }
 
-    protected function dispatch(array $payload): void
+    protected function dispatch(array $payload): bool
     {
-        $this->http_client->dispatch($payload);
+        return $this->store->capture($payload);
     }
 }

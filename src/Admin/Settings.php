@@ -36,6 +36,7 @@ class Settings
         add_action('admin_post_website_watchdog_test_exception_handler', [$this, 'handle_test_exception_handler']);
         add_action('admin_post_website_watchdog_test_shutdown_handler', [$this, 'handle_test_shutdown_handler']);
         add_action('admin_post_website_watchdog_refresh_incidents', [$this->incidents_view, 'handle_refresh']);
+        add_action('admin_post_website_watchdog_incident_status', [$this->incidents_view, 'handle_status']);
     }
 
     public function validate_api_key_option($value, $old_value, $option): string
@@ -180,7 +181,7 @@ class Settings
         }
 
         $sent = Api::capture_event($action, ['message' => $message], $target);
-        $this->redirect_with_test_result('event', $sent, $sent ? __('Test event sent.', 'website-watchdog') : __('Test event could not be sent.', 'website-watchdog'));
+        $this->redirect_with_test_result('event', $sent, $sent ? __('Test event stored locally.', 'website-watchdog') : __('Test event could not be stored.', 'website-watchdog'));
     }
 
     public function handle_test_incident(): void
@@ -200,7 +201,7 @@ class Settings
         }
 
         $sent = Api::capture_incident($details, $severity, '' !== $source ? $source : null);
-        $this->redirect_with_test_result('incident', $sent, $sent ? __('Test incident sent.', 'website-watchdog') : __('Test incident could not be sent.', 'website-watchdog'));
+        $this->redirect_with_test_result('incident', $sent, $sent ? __('Test incident stored locally.', 'website-watchdog') : __('Test incident could not be stored.', 'website-watchdog'));
     }
 
     public function handle_test_error_handler(): void
@@ -209,7 +210,7 @@ class Settings
 
         $handled = (new ErrorTrapper())->handle_error(E_ERROR, 'Website Watchdog test: simulated PHP error handler event.', __FILE__, __LINE__);
         $message = $handled
-            ? __('PHP error handler test triggered. Check your incident history for delivery.', 'website-watchdog')
+            ? __('PHP error handler test triggered. Check your local incident history.', 'website-watchdog')
             : __('PHP error handler did not handle the simulated error. Check your PHP error reporting configuration.', 'website-watchdog');
         $this->redirect_with_test_result('error_handler', $handled, $message);
     }
@@ -219,7 +220,7 @@ class Settings
         $this->authorize_test_handler('website_watchdog_test_exception_handler_nonce');
 
         (new ErrorTrapper())->handle_exception(new \RuntimeException('Website Watchdog test: simulated exception handler event.'));
-        $this->redirect_with_test_result('exception_handler', true, __('Exception handler test triggered. Check your incident history for delivery.', 'website-watchdog'));
+        $this->redirect_with_test_result('exception_handler', true, __('Exception handler test triggered. Check your local incident history.', 'website-watchdog'));
     }
 
     public function handle_test_shutdown_handler(): void
@@ -232,7 +233,7 @@ class Settings
             'file' => __FILE__,
             'line' => __LINE__,
         ]);
-        $this->redirect_with_test_result('shutdown_handler', true, __('Shutdown handler test triggered. Check your incident history for delivery.', 'website-watchdog'));
+        $this->redirect_with_test_result('shutdown_handler', true, __('Shutdown handler test triggered. Check your local incident history.', 'website-watchdog'));
     }
 
     protected function authorize_test_handler(string $nonce_action): void
@@ -326,7 +327,7 @@ class Settings
             <?php submit_button(__('Send Test Incident', 'website-watchdog'), 'secondary', 'submit', false); ?>
         </form>
         <h3><?php echo esc_html__('PHP Error Handlers', 'website-watchdog'); ?></h3>
-        <p><?php echo esc_html__('These tests invoke the handlers with simulated errors and do not cause a real PHP fatal error. Incident delivery requires a verified API key.', 'website-watchdog'); ?></p>
+        <p><?php echo esc_html__('These tests invoke the handlers with simulated errors and do not cause a real PHP fatal error. Incidents are stored locally; notifications require a verified API key.', 'website-watchdog'); ?></p>
         <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <input type="hidden" name="action" value="website_watchdog_test_error_handler" />

@@ -3,7 +3,7 @@
  * Dependency-free test harness that runs INSIDE a real WordPress install.
  *
  * Compatible with PHP 7.4+ and WordPress 6.0+. It never contacts the network (all HTTP is mocked) and restores
- * every option/transient/global it touches after each test, so it is safe to run on a live site.
+ * every option/transient/global it touches after each test. Local storage uses temporary tables.
  */
 
 namespace WebsiteWatchdog\Agent\SelfTest;
@@ -57,6 +57,9 @@ final class Sandbox
         'website_watchdog_cooldown',
         'website_watchdog_rate_limit_count',
         'website_watchdog_js_seen',
+        'website_watchdog_backoff',
+        'website_watchdog_delivery_failures',
+        'website_watchdog_event_seen',
         'website_watchdog_cached_incidents',
         'website_watchdog_cached_incidents_1',
         'website_watchdog_cached_incidents_2',
@@ -103,9 +106,20 @@ final class Sandbox
 
     public static function begin(): void
     {
-        global $wp_filter;
+        global $wp_filter, $wpdb;
 
         self::load_admin_includes();
+        if (!(new \WebsiteWatchdog\Agent\Local\Store())->install()) {
+            throw new \RuntimeException('Local incident storage is unavailable.');
+        }
+        foreach (['watchdog_incidents', 'watchdog_changes', 'watchdog_outbox'] as $name) {
+            $table = $wpdb->prefix . $name;
+            $definition = $wpdb->get_row("SHOW CREATE TABLE `$table`", ARRAY_N);
+            $sql = is_array($definition) ? preg_replace('/^CREATE TABLE /', 'CREATE TEMPORARY TABLE ', $definition[1]) : null;
+            if (!$sql || false === $wpdb->query($sql)) {
+                throw new \RuntimeException('Could not isolate local test storage: ' . $wpdb->last_error);
+            }
+        }
         self::$http_calls = [];
         self::$http_handler = null;
         self::$php_notices = [];
@@ -151,7 +165,7 @@ final class Sandbox
 
     public static function end(): void
     {
-        global $wp_filter;
+        global $wp_filter, $wpdb;
 
         restore_error_handler();
         remove_filter('pre_http_request', [__CLASS__, 'intercept_http'], -9999);
@@ -198,6 +212,12 @@ final class Sandbox
         }
 
         wp_set_current_user($state['user']);
+        foreach (['watchdog_incidents', 'watchdog_changes', 'watchdog_outbox'] as $name) {
+            $table = $wpdb->prefix . $name;
+            if (false === $wpdb->query("DROP TEMPORARY TABLE `$table`")) {
+                throw new \RuntimeException('Could not remove local test storage.');
+            }
+        }
         self::$http_handler = null;
     }
 
@@ -470,6 +490,27 @@ abstract class TestCase
         $decoded = json_decode(isset($call['args']['body']) ? (string) $call['args']['body'] : '', true);
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    protected function local_payloads(string $table): array
+    {
+        global $wpdb;
+        if (!in_array($table, ['incidents', 'changes'], true)) {
+            $this->fail('Invalid local test table.');
+        }
+        $rows = $wpdb->get_col('SELECT payload FROM ' . $wpdb->prefix . 'watchdog_' . $table . ' ORDER BY ' . ('incidents' === $table ? 'first_seen, id' : 'id'));
+        return array_map(static function ($json) {
+            return json_decode($json, true);
+        }, $rows);
+    }
+
+    protected function last_local_payload(string $table): array
+    {
+        $payloads = $this->local_payloads($table);
+        if (!$payloads) {
+            $this->fail('Expected a local record but none was found.');
+        }
+        return end($payloads);
     }
 
     // ---- request / output helpers -------------------------------------------------------------------------------

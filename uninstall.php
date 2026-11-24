@@ -11,6 +11,7 @@ function website_watchdog_uninstall(): void
         'website_watchdog_api_key_verified',
         'website_watchdog_site_id',
         'website_watchdog_offline_queue',
+        'website_watchdog_local_schema_version',
     ];
 
     foreach ($options as $option) {
@@ -40,9 +41,22 @@ function website_watchdog_uninstall(): void
         );
     }
 
-    foreach (['website_watchdog_retry_queue', 'website_watchdog_heartbeat'] as $hook) {
+    foreach (['website_watchdog_retry_queue', 'website_watchdog_heartbeat', 'website_watchdog_flush_local'] as $hook) {
         wp_clear_scheduled_hook($hook);
+    }
+
+    foreach (['watchdog_incidents', 'watchdog_changes', 'watchdog_outbox'] as $table) {
+        $wpdb->query('DROP TABLE IF EXISTS ' . $wpdb->prefix . $table); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
     }
 }
 
-website_watchdog_uninstall();
+if (is_multisite()) {
+    $site_ids = get_sites(['fields' => 'ids', 'number' => 0]);
+    foreach ($site_ids as $site_id) {
+        switch_to_blog($site_id);
+        website_watchdog_uninstall();
+        restore_current_blog();
+    }
+} else {
+    website_watchdog_uninstall();
+}

@@ -6,8 +6,10 @@ use WebsiteWatchdog\Agent\Admin\Settings;
 use WebsiteWatchdog\Agent\Cron\Heartbeat;
 use WebsiteWatchdog\Agent\Rest\HealthEndpoint;
 use WebsiteWatchdog\Agent\Rest\JsErrorEndpoint;
+use WebsiteWatchdog\Agent\Rest\IncidentEndpoint;
 use WebsiteWatchdog\Agent\Trappers\ErrorTrapper;
 use WebsiteWatchdog\Agent\Trappers\StateChangeListener;
+use WebsiteWatchdog\Agent\Local\Store;
 
 class Plugin
 {
@@ -30,11 +32,13 @@ class Plugin
 
     public function register(): void
     {
+        (new Store())->install();
         $this->settings->register();
         $this->error_trapper->register();
         $this->state_change_listener->register();
         $this->js_error_endpoint->register();
         $this->health_endpoint->register();
+        (new IncidentEndpoint())->register();
         $this->heartbeat->register();
         add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend_script']);
     }
