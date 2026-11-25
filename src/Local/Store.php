@@ -152,10 +152,10 @@ class Store
         global $wpdb;
         $table = $wpdb->prefix . 'watchdog_changes';
         $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT occurred_at, payload, shareable FROM $table WHERE occurred_at >= %s AND occurred_at <= %s ORDER BY occurred_at DESC, id DESC",
+            "SELECT id, occurred_at, payload, shareable FROM $table WHERE occurred_at >= %s AND occurred_at <= %s ORDER BY occurred_at DESC, id DESC",
             gmdate('Y-m-d H:i:s', $time - 900), gmdate('Y-m-d H:i:s', $time)
         ), ARRAY_A);
-        if (!is_array($rows)) {
+        if (!is_array($rows) || $wpdb->last_error) {
             error_log('Website Watchdog could not read local changes.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             return null;
         }
@@ -163,7 +163,7 @@ class Store
         foreach ($rows as $row) {
             $payload = json_decode($row['payload'], true);
             if (is_array($payload)) {
-                $changes[] = ['timestamp' => strtotime($row['occurred_at'] . ' UTC'), 'payload' => $payload, 'shareable' => (bool) $row['shareable']];
+                $changes[] = ['id' => (int) $row['id'], 'timestamp' => strtotime($row['occurred_at'] . ' UTC'), 'payload' => $payload, 'shareable' => (bool) $row['shareable']];
             }
         }
         return $changes;
@@ -246,15 +246,19 @@ class Store
         }
     }
 
-    public function get_incident(string $id): ?array
+    public function get_incident(string $id)
     {
         global $wpdb;
         $table = $wpdb->prefix . 'watchdog_incidents';
         $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id = %s", $id), ARRAY_A);
+        if ($wpdb->last_error) {
+            error_log('Website Watchdog could not read a local incident.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return false;
+        }
         return is_array($row) ? $row : null;
     }
 
-    public function list_incidents(int $page, int $per_page = 20): array
+    public function list_incidents(int $page, int $per_page = 20): ?array
     {
         global $wpdb;
         $table = $wpdb->prefix . 'watchdog_incidents';
@@ -262,13 +266,60 @@ class Store
             "SELECT * FROM $table ORDER BY last_seen DESC, id DESC LIMIT %d OFFSET %d",
             $per_page, (max(1, $page) - 1) * $per_page
         ), ARRAY_A);
-        return is_array($rows) ? $rows : [];
+        if (!is_array($rows) || $wpdb->last_error) {
+            error_log('Website Watchdog could not read local incidents.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return null;
+        }
+        return $rows;
     }
 
-    public function count_incidents(): int
+    public function count_incidents(): ?int
     {
         global $wpdb;
-        return (int) $wpdb->get_var('SELECT COUNT(*) FROM ' . $wpdb->prefix . 'watchdog_incidents');
+        $count = $wpdb->get_var('SELECT COUNT(*) FROM ' . $wpdb->prefix . 'watchdog_incidents');
+        if (null === $count || $wpdb->last_error) {
+            error_log('Website Watchdog could not count local incidents.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return null;
+        }
+        return (int) $count;
+    }
+
+    public function list_events(int $page, int $per_page = 20): ?array
+    {
+        global $wpdb;
+        $table = $wpdb->prefix . 'watchdog_changes';
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, occurred_at, payload, shareable FROM $table ORDER BY occurred_at DESC, id DESC LIMIT %d OFFSET %d",
+            $per_page, (max(1, $page) - 1) * $per_page
+        ), ARRAY_A);
+        if (!is_array($rows) || $wpdb->last_error) {
+            error_log('Website Watchdog could not read local events.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return null;
+        }
+        return $rows;
+    }
+
+    public function count_events(): ?int
+    {
+        global $wpdb;
+        $count = $wpdb->get_var('SELECT COUNT(*) FROM ' . $wpdb->prefix . 'watchdog_changes');
+        if (null === $count || $wpdb->last_error) {
+            error_log('Website Watchdog could not count local events.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return null;
+        }
+        return (int) $count;
+    }
+
+    public function get_event(int $id)
+    {
+        global $wpdb;
+        $table = $wpdb->prefix . 'watchdog_changes';
+        $row = $wpdb->get_row($wpdb->prepare("SELECT id, occurred_at, payload, shareable FROM $table WHERE id = %d", $id), ARRAY_A);
+        if ($wpdb->last_error) {
+            error_log('Website Watchdog could not read a local event.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return false;
+        }
+        return is_array($row) ? $row : null;
     }
 
     public function update_status(string $id, int $revision, string $status, bool $mute_future): string

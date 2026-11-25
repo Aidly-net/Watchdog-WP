@@ -35,7 +35,7 @@ class Settings
         add_action('admin_post_website_watchdog_test_error_handler', [$this, 'handle_test_error_handler']);
         add_action('admin_post_website_watchdog_test_exception_handler', [$this, 'handle_test_exception_handler']);
         add_action('admin_post_website_watchdog_test_shutdown_handler', [$this, 'handle_test_shutdown_handler']);
-        add_action('admin_post_website_watchdog_refresh_incidents', [$this->incidents_view, 'handle_refresh']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('admin_post_website_watchdog_incident_status', [$this->incidents_view, 'handle_status']);
     }
 
@@ -69,9 +69,20 @@ class Settings
 
         update_option('website_watchdog_site_id', $site_id);
         self::mark_api_key_verified(true);
-        delete_transient('website_watchdog_cached_incidents');
-
         return $api_key;
+    }
+
+    public function enqueue_admin_assets(string $hook): void
+    {
+        if ('toplevel_page_website-watchdog-settings' !== $hook) {
+            return;
+        }
+        wp_enqueue_style(
+            'website-watchdog-admin',
+            plugins_url('assets/css/admin.css', WEBSITE_WATCHDOG_PATH . 'website-watchdog.php'),
+            [],
+            WEBSITE_WATCHDOG_VERSION
+        );
     }
 
     public function add_menu_page(): void
@@ -279,7 +290,7 @@ class Settings
 ?>
         <hr />
         <h2><?php echo esc_html__('Send Test Data', 'website-watchdog'); ?></h2>
-        <p><?php echo esc_html__('Use these forms to verify that custom events and incidents reach Website Watchdog.', 'website-watchdog'); ?></p>
+        <p><?php echo esc_html__('Use these forms to record test events and incidents locally. Incident notifications require a verified API key.', 'website-watchdog'); ?></p>
         <h3><?php echo esc_html__('Custom Event', 'website-watchdog'); ?></h3>
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <input type="hidden" name="action" value="website_watchdog_test_event" />
@@ -353,7 +364,7 @@ class Settings
         // Tab selection is read-only navigation.
         $tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : 'settings'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-        return in_array($tab, ['settings', 'test', 'incidents'], true) ? $tab : 'settings';
+        return in_array($tab, ['settings', 'test', 'incidents', 'events'], true) ? $tab : 'settings';
     }
 
     protected function render_tabs(string $active_tab): void
@@ -362,6 +373,7 @@ class Settings
             'settings' => __('Settings', 'website-watchdog'),
             'test' => __('Send Test Data', 'website-watchdog'),
             'incidents' => __('Incident History', 'website-watchdog'),
+            'events' => __('Event History', 'website-watchdog'),
         ];
 
         echo '<nav class="nav-tab-wrapper">';
@@ -404,8 +416,10 @@ class Settings
             <?php elseif ('test' === $active_tab) : ?>
                 <?php $this->render_test_result(); ?>
                 <?php $this->render_test_forms(); ?>
-            <?php else : ?>
+            <?php elseif ('incidents' === $active_tab) : ?>
                 <?php $this->incidents_view->render(); ?>
+            <?php else : ?>
+                <?php $this->incidents_view->render_events(); ?>
             <?php endif; ?>
         </div>
 <?php

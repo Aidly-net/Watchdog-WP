@@ -3,6 +3,7 @@
 namespace WebsiteWatchdog\Agent\SelfTest\Cases;
 
 use WebsiteWatchdog\Agent\Admin\Settings;
+use WebsiteWatchdog\Agent\Local\Store;
 use WebsiteWatchdog\Agent\SelfTest\Sandbox;
 use WebsiteWatchdog\Agent\SelfTest\TestCase;
 
@@ -96,7 +97,6 @@ class SettingsTest extends TestCase
     public function test_valid_key_is_saved_and_site_registered(): void
     {
         $this->mock_http_response(200, '{"data":{"site_id":"site-42"}}');
-        set_transient('website_watchdog_cached_incidents', ['stale'], 60);
 
         $result = $this->settings->validate_api_key_option('  good-key ', '', self::OPTION);
 
@@ -104,7 +104,6 @@ class SettingsTest extends TestCase
         $this->assert_same('good-key', get_option(self::OPTION));
         $this->assert_same('site-42', get_option('website_watchdog_site_id'));
         $this->assert_true($this->key_is_verified());
-        $this->assert_false(get_transient('website_watchdog_cached_incidents'));
         $this->assert_same('Bearer good-key', $this->last_http_call()['args']['headers']['Authorization']);
     }
 
@@ -361,7 +360,7 @@ class SettingsTest extends TestCase
         $this->assert_contains('Website Watchdog Settings', $out);
         $this->assert_contains('nav-tab-wrapper', $out);
         $this->assert_same(1, substr_count($out, 'nav-tab-active'));
-        foreach (['Settings', 'Send Test Data', 'Incident History'] as $label) {
+        foreach (['Settings', 'Send Test Data', 'Incident History', 'Event History'] as $label) {
             $this->assert_contains('>' . $label . '</a>', $out);
         }
         $this->assert_contains('action="options.php"', $out);
@@ -402,6 +401,78 @@ class SettingsTest extends TestCase
         $out = $this->output('render_page');
 
         $this->assert_contains('No incident history available yet.', $out);
+    }
+
+    public function test_event_history_and_details_escape_custom_data(): void
+    {
+        $this->as_admin();
+        $store = new Store();
+        $this->assert_true($store->record_change([
+            'timestamp' => gmdate('c'),
+            'payload' => ['action' => 'deploy', 'target' => '<script>target</script>', 'details' => ['message' => '<script>private</script>']],
+        ]));
+        $event = $store->list_events(1)[0];
+        $this->set_request(['tab' => 'events']);
+        $out = $this->output('render_page');
+        $this->assert_contains('deploy', $out);
+        $this->assert_contains('Custom event', $out);
+        $this->assert_not_contains('<script>target</script>', $out);
+        $this->assert_contains('event_id=', $out);
+
+        $this->set_request(['tab' => 'events', 'event_id' => $event['id']]);
+        $out = $this->output('render_page');
+        $this->assert_contains('Back to event history', $out);
+        $this->assert_contains('&lt;script&gt;private&lt;/script&gt;', $out);
+        $this->assert_not_contains('<script>private</script>', $out);
+
+        $this->set_request(['tab' => 'events', 'event_id' => '0']);
+        $this->assert_contains('Event not found or expired.', $this->output('render_page'));
+    }
+
+    public function test_incident_detail_links_to_local_changes_and_preserves_status_controls(): void
+    {
+        $this->as_admin();
+        $store = new Store();
+        $timestamp = gmdate('c');
+        $this->assert_true($store->record_change([
+            'timestamp' => $timestamp,
+            'payload' => ['action' => 'plugin_updated', 'target' => 'Example', 'details' => ['plugin_slug' => 'example']],
+        ], true));
+        $this->assert_true($store->capture([
+            'timestamp' => $timestamp,
+            'payload' => ['source' => 'plugins/example/file.php', 'details' => 'Failure <script>'],
+        ]));
+        $incident = $store->list_incidents(1)[0];
+        $this->set_request(['tab' => 'incidents', 'incident_id' => $incident['id']]);
+        $out = $this->output('render_page');
+        $this->assert_contains('Potentially related:', $out);
+        $this->assert_contains('event_id=', $out);
+        $this->assert_contains('name="revision"', $out);
+        $this->assert_contains('website_watchdog_incident_status', $out);
+        $this->assert_not_contains('Failure <script>', $out);
+    }
+
+    public function test_event_history_paginates_and_labels_wordpress_changes(): void
+    {
+        $this->as_admin();
+        $store = new Store();
+        for ($i = 0; $i < 21; $i++) {
+            $this->assert_true($store->record_change([
+                'timestamp' => gmdate('c', time() + $i),
+                'payload' => ['action' => 'event_' . $i, 'target' => 'Example'],
+            ], true));
+        }
+        $this->set_request(['tab' => 'events']);
+        $first = $this->output('render_page');
+        $this->assert_contains('WordPress change', $first);
+        $this->assert_contains('Page 1 of 2', $first);
+        $this->assert_contains('event_page=2', $first);
+        $this->assert_not_contains('event_0</a>', $first);
+        $this->set_request(['tab' => 'events', 'event_page' => '2']);
+        $second = $this->output('render_page');
+        $this->assert_contains('Page 2 of 2', $second);
+        $this->assert_contains('event_0</a>', $second);
+        $this->assert_contains('event_page=1', $second);
     }
 
     public function test_settings_page_warns_about_unverified_key(): void

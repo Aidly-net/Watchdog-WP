@@ -35,6 +35,9 @@ class IncidentEndpoint
         $id = (string) $request['id'];
         $result = $store->update_status($id, $body['expected_revision'], $body['status'], $body['mute_future']);
         $row = $store->get_incident($id);
+        if (false === $row) {
+            return new WP_REST_Response(['error' => 'Local incident storage unavailable.'], 500);
+        }
         $codes = ['ok' => 200, 'conflict' => 409, 'not_found' => 404, 'invalid' => 400, 'error' => 500];
         $data = ['result' => $result];
         if ($row) {

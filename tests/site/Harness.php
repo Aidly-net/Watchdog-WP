@@ -60,12 +60,6 @@ final class Sandbox
         'website_watchdog_backoff',
         'website_watchdog_delivery_failures',
         'website_watchdog_event_seen',
-        'website_watchdog_cached_incidents',
-        'website_watchdog_cached_incidents_1',
-        'website_watchdog_cached_incidents_2',
-        'website_watchdog_cached_incidents_3',
-        'website_watchdog_cached_incidents_4',
-        'website_watchdog_cached_incidents_5',
     ];
     const GLOBALS_TO_RESTORE = [
         'menu', 'submenu', 'admin_page_hooks', 'wp_settings_sections', 'wp_settings_fields',

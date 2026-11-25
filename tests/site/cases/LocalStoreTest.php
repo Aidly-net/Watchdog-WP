@@ -7,6 +7,27 @@ use WebsiteWatchdog\Agent\SelfTest\TestCase;
 
 class LocalStoreTest extends TestCase
 {
+    public function test_event_history_includes_custom_and_wordpress_changes_in_order(): void
+    {
+        $store = new Store();
+        $now = time();
+        for ($i = 0; $i < 21; $i++) {
+            $this->assert_true($store->record_change([
+                'timestamp' => gmdate('c', $now + $i),
+                'payload' => ['action' => 'event_' . $i, 'target' => 'Example', 'details' => ['value' => $i]],
+            ], 20 === $i));
+        }
+        $this->assert_same(21, $store->count_events());
+        $first = $store->list_events(1);
+        $second = $store->list_events(2);
+        $this->assert_count(20, $first);
+        $this->assert_count(1, $second);
+        $this->assert_same('event_20', json_decode($first[0]['payload'], true)['action']);
+        $this->assert_same('event_0', json_decode($second[0]['payload'], true)['action']);
+        $this->assert_same($first[0], $store->get_event((int) $first[0]['id']));
+        $this->assert_same(null, $store->get_event(0));
+    }
+
     public function test_private_custom_changes_never_enter_outbox(): void
     {
         global $wpdb;
