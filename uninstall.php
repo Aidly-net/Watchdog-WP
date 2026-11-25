@@ -12,6 +12,10 @@ function website_watchdog_uninstall(): void
         'website_watchdog_site_id',
         'website_watchdog_offline_queue',
         'website_watchdog_local_schema_version',
+        'website_watchdog_welcome_pending',
+        'website_watchdog_welcome_completed',
+        'website_watchdog_usage_telemetry',
+        'website_watchdog_usage_installation_id',
     ];
 
     foreach ($options as $option) {
@@ -38,7 +42,7 @@ function website_watchdog_uninstall(): void
         );
     }
 
-    foreach (['website_watchdog_retry_queue', 'website_watchdog_heartbeat', 'website_watchdog_flush_local'] as $hook) {
+    foreach (['website_watchdog_retry_queue', 'website_watchdog_heartbeat', 'website_watchdog_flush_local', 'website_watchdog_report_usage', 'website_watchdog_forget_usage'] as $hook) {
         wp_clear_scheduled_hook($hook);
     }
 

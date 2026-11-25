@@ -6,6 +6,9 @@
 define('ABSPATH', __DIR__ . '/');
 define('WP_PLUGIN_DIR', __DIR__ . '/plugins');
 define('MINUTE_IN_SECONDS', 60);
+define('HOUR_IN_SECONDS', 3600);
+define('DAY_IN_SECONDS', 86400);
+define('MONTH_IN_SECONDS', 2592000);
 define('WEBSITE_WATCHDOG_VERSION', '1.0.0');
 define('WEBSITE_WATCHDOG_PATH', dirname(__DIR__) . '/');
 define('WEBSITE_WATCHDOG_URL', 'https://example.test');
@@ -263,6 +266,25 @@ function wp_schedule_event($timestamp, $recurrence, $hook)
     WPState::$scheduled[$hook] = $timestamp;
 
     return true;
+}
+
+function wp_schedule_single_event($timestamp, $hook)
+{
+    WPState::$scheduled[$hook] = $timestamp;
+
+    return true;
+}
+
+function wp_clear_scheduled_hook($hook)
+{
+    unset(WPState::$scheduled[$hook]);
+
+    return true;
+}
+
+function wp_generate_uuid4()
+{
+    return '12345678-1234-1234-1234-123456789abc';
 }
 
 function register_rest_route($namespace, $route, $args)

@@ -55,10 +55,14 @@ if (defined('WEBSITE_WATCHDOG_SELFTEST') && WEBSITE_WATCHDOG_SELFTEST && is_admi
 }
 
 register_activation_hook(__FILE__, static function (): void {
+    if (!get_option('website_watchdog_welcome_completed', false)) {
+        update_option('website_watchdog_welcome_pending', 1, false);
+    }
     \WebsiteWatchdog\Agent\Api::send_plugin_state_event('plugin_activated');
 });
 
 register_deactivation_hook(__FILE__, static function (): void {
+    \WebsiteWatchdog\Agent\UsageTelemetry::deactivate();
     \WebsiteWatchdog\Agent\Api::send_plugin_state_event('plugin_deactivated');
 });
 add_action('plugins_loaded', static function (): void {

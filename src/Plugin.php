@@ -3,6 +3,7 @@
 namespace WebsiteWatchdog\Agent;
 
 use WebsiteWatchdog\Agent\Admin\Settings;
+use WebsiteWatchdog\Agent\UsageTelemetry;
 use WebsiteWatchdog\Agent\Cron\Heartbeat;
 use WebsiteWatchdog\Agent\Rest\HealthEndpoint;
 use WebsiteWatchdog\Agent\Rest\JsErrorEndpoint;
@@ -33,6 +34,7 @@ class Plugin
     public function register(): void
     {
         (new Store())->install();
+        UsageTelemetry::register();
         $this->settings->register();
         $this->error_trapper->register();
         $this->state_change_listener->register();

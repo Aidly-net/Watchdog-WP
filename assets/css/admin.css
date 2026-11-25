@@ -184,6 +184,17 @@
     margin-top: 16px;
 }
 
+.watchdog-welcome {
+    max-width: 760px;
+    margin-top: 40px;
+}
+
+.watchdog-welcome-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 36px;
+}
+
 @media (max-width: 782px) {
     .watchdog-detail-grid {
         grid-template-columns: 1fr;

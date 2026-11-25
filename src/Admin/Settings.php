@@ -5,6 +5,7 @@ namespace WebsiteWatchdog\Agent\Admin;
 use WebsiteWatchdog\Agent\Api;
 use WebsiteWatchdog\Agent\Http\Client;
 use WebsiteWatchdog\Agent\Trappers\ErrorTrapper;
+use WebsiteWatchdog\Agent\UsageTelemetry;
 
 class Settings
 {
@@ -27,6 +28,7 @@ class Settings
 
     public function register(): void
     {
+        (new WelcomeScreen())->register();
         add_action('admin_menu', [$this, 'add_menu_page']);
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_notices', [$this, 'render_verification_notice']);
@@ -74,7 +76,7 @@ class Settings
 
     public function enqueue_admin_assets(string $hook): void
     {
-        if ('toplevel_page_website-watchdog-settings' !== $hook) {
+        if (!in_array($hook, ['toplevel_page_website-watchdog-settings', 'admin_page_website-watchdog-welcome'], true)) {
             return;
         }
         wp_enqueue_style(
@@ -115,7 +117,7 @@ class Settings
 
         add_settings_section(
             'website_watchdog_main',
-            __('Main Settings', 'website-watchdog'),
+            __('Cloud Settings', 'website-watchdog'),
             [$this, 'render_section_intro'],
             'website_watchdog_settings_group'
         );
@@ -130,6 +132,15 @@ class Settings
             ]
         );
 
+        register_setting(
+            'website_watchdog_settings_group',
+            'website_watchdog_usage_telemetry',
+            [
+                'sanitize_callback' => [$this, 'sanitize_usage_telemetry'],
+                'default' => 0,
+            ]
+        );
+
         add_settings_field(
             'website_watchdog_api_key',
             __('API Key', 'website-watchdog'),
@@ -137,6 +148,32 @@ class Settings
             'website_watchdog_settings_group',
             'website_watchdog_main'
         );
+
+        add_settings_field(
+            'website_watchdog_usage_telemetry',
+            __('Anonymous usage statistics', 'website-watchdog'),
+            [$this, 'render_usage_telemetry_field'],
+            'website_watchdog_settings_group',
+            'website_watchdog_main'
+        );
+    }
+
+    public function sanitize_usage_telemetry($value): int
+    {
+        $consent = in_array($value, [1, '1', true], true);
+        UsageTelemetry::set_consent($consent);
+
+        return $consent ? 1 : 0;
+    }
+
+    public function render_usage_telemetry_field(): void
+    {
+        $consent = (bool) get_option('website_watchdog_usage_telemetry', false);
+        echo '<input type="hidden" name="website_watchdog_usage_telemetry" value="0" />';
+        echo '<label><input type="checkbox" name="website_watchdog_usage_telemetry" value="1" ' . checked($consent, true, false) . ' /> '
+            . esc_html__('Send anonymous usage information such as WordPress/Plugin/PHP versions.', 'website-watchdog') . '</label>';
+        echo '<p class="description">' . esc_html__('No incident details, error messages, or custom event data are sent. Help us improve Website Watchdog.', 'website-watchdog') . '</p>';
+        echo '<p class="description">' . esc_html__('A random installation ID is used to count opt-in installations. Reports do not include your site URL or API key.', 'website-watchdog') . '</p>';
     }
 
     public function sanitize_api_key($value): string
@@ -148,7 +185,9 @@ class Settings
 
     public function render_section_intro(): void
     {
-        echo '<p>' . esc_html__('Configure the connection to Website Watchdog.', 'website-watchdog') . '</p>';
+        echo '<p><strong>' . esc_html__('Connect to Website Watchdog Cloud', 'website-watchdog') . '</strong></p>';
+        echo '<p>' . esc_html__('Get remote uptime monitoring, SSL/domain expiration alerts, Slack/Webhook notifications, and centralized monitoring.', 'website-watchdog') . '</p>';
+        echo '<p><em>' . esc_html__('Your diagnostic data stays on your WordPress site.', 'website-watchdog') . '</em></p>';
     }
 
     public function render_api_key_field(): void
@@ -370,10 +409,10 @@ class Settings
     protected function render_tabs(string $active_tab): void
     {
         $tabs = [
-            'settings' => __('Settings', 'website-watchdog'),
-            'test' => __('Send Test Data', 'website-watchdog'),
             'events' => __('Event History', 'website-watchdog'),
             'incidents' => __('Incident History', 'website-watchdog'),
+            'test' => __('Send Test Data', 'website-watchdog'),
+            'settings' => __('Cloud Settings', 'website-watchdog'),
         ];
 
         echo '<nav class="nav-tab-wrapper">';

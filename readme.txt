@@ -25,6 +25,7 @@ The Website Watchdog service receives minimal incident notifications and can del
 * Sends minimal notifications for new or reopened incident groups and synchronizes incident status with the service.
 * Sends scheduled heartbeats and provides an authenticated health endpoint for availability checks.
 * Supports locally stored custom events and incidents through PHP helper functions.
+* Shows a post-activation setup screen and offers optional anonymous version reporting.
 * Retries failed deliveries using WP-Cron and removes local data on uninstall.
 
 **Website Watchdog is an independent software project operated by Aidly.net.**
@@ -43,6 +44,7 @@ The plugin uses the external Website Watchdog service to record site changes, mo
 * **Connection and heartbeat:** The site URL, API key for authentication, and plugin, PHP, and WordPress versions.
 * **Site changes:** Plugin, theme, and core state-change events, including relevant names and details, are sent separately from incident notifications.
 * **Incident notifications and status:** Opaque identifiers, severity, revision, status, mute setting, last-seen time, an administrator incident link, and up to 20 approved recent plugin/theme changes (actions, names, timestamps, and available versions). The service uses these to deliver generic alerts and synchronize status and severity.
+* **Optional anonymous usage reports:** Only after opt-in, a random installation ID, WordPress/plugin/PHP versions, and whether the site has a verified Cloud connection. Reports do not include the site URL, API key, incident details, error messages, or custom event data. Reporting can be turned off in Cloud Settings.
 
 Incident messages, sources, URLs, stack traces, and custom events remain on the WordPress site. Custom events are not included in the recent changes sent with incident notifications. The plugin redacts values under sensitive field names and removes URL query strings from sanitized data, but this is not a guarantee that all sensitive information is removed from free text or local records.
 
@@ -50,7 +52,7 @@ The plugin also checks GitHub releases for updates. These requests are made to G
 
 = Storage and delivery =
 
-Incidents are retained locally for 30 days after they were last seen; events and changes are retained for 30 days after they occurred. Cleanup runs through WP-Cron and may be delayed on low-traffic sites. Minimal incident records remain in the service after local expiry; their WordPress links will no longer show the incident.
+Incidents are retained locally for 30 days after they were last seen; events and changes are retained for 30 days after they occurred. Cleanup runs through WP-Cron and may be delayed on low-traffic sites. SaaS event records are purged 12 months after occurrence and incident records 12 months after last seen; their WordPress links may be unavailable after the local record expires. Opt-in usage reports are refreshed every 30 days and purged 12 months after the last report.
 
 Incident updates are queued locally. When a new incident, reopening, or severity change is saved, the plugin immediately attempts delivery if the API key is verified; this synchronous request has a 2-second timeout. Failed attempts and other status updates are retried through WP-Cron, whose timing depends on site traffic and configuration. A separate offline queue for site-change events holds up to 50 events or 256 KB and may discard older events. In rare cases, an alert may be delivered more than once if delivery succeeds but confirmation is not recorded.
 
@@ -61,8 +63,8 @@ Uninstalling the plugin removes its local incident, event, and outbox tables, se
 == Installation ==
 
 1. Upload the `website-watchdog` folder to the `/wp-content/plugins/` directory.
-2. Activate the plugin through the 'Plugins' menu in WordPress.
-3. Navigate to **Website Watchdog > Settings** and enter the API key generated in the Website Watchdog portal at https://wd.aidly.net/settings/api-keys.
+2. Activate the plugin through the 'Plugins' menu in WordPress and complete the welcome screen.
+3. Optionally connect Website Watchdog Cloud and enter the API key generated in the portal at https://wd.aidly.net/settings/api-keys.
 4. Use **Send Test Data** to record a test event or incident, then inspect **Event History** or **Incident History**. Configure alert channels in the service.
 
 == Frequently Asked Questions ==
