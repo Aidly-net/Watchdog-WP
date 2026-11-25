@@ -210,12 +210,15 @@ class Client
     private function is_minimal_incident(array $payload): bool
     {
         $fields = ['event_id', 'local_id', 'revision', 'status', 'mute_future', 'last_seen_at', 'incident_url', 'recent_changes', 'notify'];
-        if (count($payload) !== count($fields) || array_diff(array_keys($payload), $fields)
+        if (array_diff($fields, array_keys($payload)) || array_diff(array_keys($payload), array_merge($fields, ['severity']))
             || !is_string($payload['event_id']) || !is_string($payload['local_id'])
             || !is_int($payload['revision']) || !is_string($payload['status'])
             || !is_bool($payload['mute_future']) || !is_string($payload['last_seen_at'])
             || !is_string($payload['incident_url']) || !is_array($payload['recent_changes'])
             || !is_bool($payload['notify'])) {
+            return false;
+        }
+        if (array_key_exists('severity', $payload) && !in_array($payload['severity'], ['info', 'warning', 'error', 'critical'], true)) {
             return false;
         }
         $uuid = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';

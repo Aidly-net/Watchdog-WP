@@ -53,6 +53,42 @@ class LocalStoreTest extends TestCase
         $this->assert_same('2.0', $payload['recent_changes'][0]['new_version']);
     }
 
+    public function test_severity_is_sent_and_changes_sync_without_an_extra_alert(): void
+    {
+        global $wpdb;
+        $store = new Store();
+        $event = [
+            'timestamp' => gmdate('c'),
+            'payload' => ['severity' => 'warning', 'source' => 'PRIVATE_SOURCE', 'details' => 'PRIVATE_DETAILS'],
+        ];
+        $this->assert_true($store->capture($event));
+        $table = $wpdb->prefix . 'watchdog_outbox';
+        $first = json_decode($wpdb->get_var("SELECT payload FROM $table ORDER BY id ASC LIMIT 1"), true);
+        $this->assert_same('warning', $first['severity']);
+        $this->assert_true($first['notify']);
+        $this->assert_not_contains('PRIVATE_', wp_json_encode($first));
+        $this->assert_true($store->capture($event));
+        $this->assert_same('1', $wpdb->get_var("SELECT COUNT(*) FROM $table"));
+
+        $event['payload']['severity'] = 'critical';
+        $this->assert_true($store->capture($event));
+        $second = json_decode($wpdb->get_var("SELECT payload FROM $table ORDER BY id DESC LIMIT 1"), true);
+        $this->assert_same('critical', $second['severity']);
+        $this->assert_false($second['notify']);
+        $this->assert_same(2, $second['revision']);
+        $this->assert_same('ok', $store->update_status($second['local_id'], 2, 'resolved', false));
+
+        $event['payload']['severity'] = 'error';
+        $this->assert_true($store->capture($event));
+        $reopened = json_decode($wpdb->get_var("SELECT payload FROM $table ORDER BY id DESC LIMIT 1"), true);
+        $this->assert_same('error', $reopened['severity']);
+        $this->assert_true($reopened['notify']);
+        $this->assert_same('reopened', $reopened['status']);
+        $this->assert_not_contains('PRIVATE_', wp_json_encode($reopened));
+        $event['payload']['severity'] = 'PRIVATE_INVALID';
+        $this->assert_false($store->capture($event));
+    }
+
     public function test_grouping_mute_and_revision_conflicts(): void
     {
         global $wpdb;

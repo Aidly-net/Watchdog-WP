@@ -120,6 +120,22 @@
     color: #165c30;
 }
 
+.watchdog-severity-critical,
+.watchdog-severity-error {
+    background: #fce8e6;
+    color: #8a2424;
+}
+
+.watchdog-severity-warning {
+    background: #fcf0d7;
+    color: #755000;
+}
+
+.watchdog-severity-info {
+    background: #e5f1fa;
+    color: #135e96;
+}
+
 .watchdog-code {
     background: #f6f7f7;
     border: 1px solid #dcdcde;

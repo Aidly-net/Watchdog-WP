@@ -42,7 +42,7 @@ The plugin uses the external Website Watchdog service to record site changes, mo
 
 * **Connection and heartbeat:** The site URL, API key for authentication, and plugin, PHP, and WordPress versions.
 * **Site changes:** Plugin, theme, and core state-change events, including relevant names and details, are sent separately from incident notifications.
-* **Incident notifications and status:** Opaque identifiers, revision, status, mute setting, last-seen time, an administrator incident link, and up to 20 approved recent plugin/theme changes (actions, names, timestamps, and available versions). The service uses these to deliver generic alerts and synchronize status.
+* **Incident notifications and status:** Opaque identifiers, severity, revision, status, mute setting, last-seen time, an administrator incident link, and up to 20 approved recent plugin/theme changes (actions, names, timestamps, and available versions). The service uses these to deliver generic alerts and synchronize status and severity.
 
 Incident messages, sources, URLs, stack traces, and custom events remain on the WordPress site. Custom events are not included in the recent changes sent with incident notifications. The plugin redacts values under sensitive field names and removes URL query strings from sanitized data, but this is not a guarantee that all sensitive information is removed from free text or local records.
 

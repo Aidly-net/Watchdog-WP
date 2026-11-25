@@ -51,7 +51,7 @@ The public service pages are available at:
 
 Incident messages, sources, URLs, traces and custom event details stay in
 WordPress. New or reopened incidents send a generic notification, an
-administrator-only WordPress link, and up to 20 recent plugin/theme changes
+administrator-only WordPress link, severity, and up to 20 recent plugin/theme changes
 (names, actions, timestamps and available versions). SaaS also receives
 opaque IDs, revisions and status needed for synchronization. Plugin/theme
 installations and core updates continue to be sent in the separate state-change

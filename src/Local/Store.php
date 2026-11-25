@@ -9,6 +9,7 @@ class Store
 {
     private const VERSION = '2';
     private const ACTIONS = ['plugin_updated', 'plugin_activated', 'plugin_deactivated', 'theme_updated', 'theme_switched'];
+    private const SEVERITIES = ['info', 'warning', 'error', 'critical'];
 
     public function install(): bool
     {
@@ -96,7 +97,8 @@ class Store
         $time = strtotime((string) ($event['timestamp'] ?? ''));
         $json = wp_json_encode($payload);
         if (false === $time || false === $json || !isset($payload['source'], $payload['details'])
-            || '' === (string) $payload['source'] || '' === (string) $payload['details']) {
+            || '' === (string) $payload['source'] || '' === (string) $payload['details']
+            || (isset($payload['severity']) && !in_array($payload['severity'], self::SEVERITIES, true))) {
             error_log('Website Watchdog could not encode a local incident.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             return false;
         }
@@ -117,11 +119,15 @@ class Store
             return false;
         }
         $notify = 1 === $inserted;
+        $sync = $notify;
         if (!$notify) {
             $reopened = 'resolved' === $row['status'] || ('muted' === $row['status'] && !(bool) $row['mute_future']);
+            $previous = json_decode($row['payload'], true);
+            $severity_changed = ($previous['severity'] ?? null) !== ($payload['severity'] ?? null);
             $row['status'] = $reopened ? 'reopened' : $row['status'];
-            $row['revision'] = (int) $row['revision'] + ($reopened ? 1 : 0);
+            $row['revision'] = (int) $row['revision'] + ($reopened || $severity_changed ? 1 : 0);
             $row['last_seen'] = max($row['last_seen'], $date);
+            $row['payload'] = $json;
             $updated = $wpdb->query($wpdb->prepare(
                 "UPDATE $table SET occurrences = occurrences + 1, last_seen = %s, payload = %s, status = %s, revision = %d WHERE id = %s",
                 $row['last_seen'], $json, $row['status'], $row['revision'], $row['id']
@@ -132,8 +138,9 @@ class Store
                 return false;
             }
             $notify = $reopened;
+            $sync = $reopened || $severity_changed;
         }
-        if ($notify && !$this->enqueue($row, true)) {
+        if ($sync && !$this->enqueue($row, $notify)) {
             $wpdb->query('ROLLBACK');
             return false;
         }
@@ -141,7 +148,7 @@ class Store
             error_log('Website Watchdog could not commit a local incident.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             return false;
         }
-        if ($notify) {
+        if ($sync) {
             $this->schedule_flush();
         }
         return true;
@@ -172,6 +179,11 @@ class Store
     private function enqueue(array $incident, bool $notify): bool
     {
         global $wpdb;
+        $local_payload = json_decode($incident['payload'], true);
+        if (!is_array($local_payload) || (isset($local_payload['severity']) && !in_array($local_payload['severity'], self::SEVERITIES, true))) {
+            error_log('Website Watchdog could not read local incident severity.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return false;
+        }
         $time = strtotime($incident['last_seen'] . ' UTC');
         $changes = [];
         $recent = $this->recent_changes($time);
@@ -212,6 +224,9 @@ class Store
             'recent_changes' => $changes,
             'notify' => $notify,
         ];
+        if (isset($local_payload['severity'])) {
+            $body['severity'] = $local_payload['severity'];
+        }
         $json = wp_json_encode($body);
         if (false === $json || false === $wpdb->insert($wpdb->prefix . 'watchdog_outbox', [
             'event_id' => $event_id, 'payload' => $json, 'created_at' => gmdate('Y-m-d H:i:s'),

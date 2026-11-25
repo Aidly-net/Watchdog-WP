@@ -89,11 +89,19 @@ class IncidentsView
             echo '<div class="watchdog-empty">' . esc_html__('No incident history available yet.', 'website-watchdog') . '</div>';
             return;
         }
-        echo '<div class="watchdog-table-wrap"><table class="widefat striped watchdog-table"><thead><tr><th scope="col">' . esc_html__('Incident', 'website-watchdog') . '</th><th scope="col">' . esc_html__('Occurrences', 'website-watchdog') . '</th><th scope="col">' . esc_html__('Last seen (UTC)', 'website-watchdog') . '</th><th scope="col">' . esc_html__('Status', 'website-watchdog') . '</th></tr></thead><tbody>';
+        $severity_labels = [
+            'info' => __('Info', 'website-watchdog'),
+            'warning' => __('Warning', 'website-watchdog'),
+            'error' => __('Error', 'website-watchdog'),
+            'critical' => __('Critical', 'website-watchdog'),
+        ];
+        echo '<div class="watchdog-table-wrap"><table class="widefat striped watchdog-table"><thead><tr><th scope="col">' . esc_html__('Severity', 'website-watchdog') . '</th><th scope="col">' . esc_html__('Incident', 'website-watchdog') . '</th><th scope="col">' . esc_html__('Occurrences', 'website-watchdog') . '</th><th scope="col">' . esc_html__('Last seen (UTC)', 'website-watchdog') . '</th><th scope="col">' . esc_html__('Status', 'website-watchdog') . '</th></tr></thead><tbody>';
         foreach ($incidents as $incident) {
             $payload = json_decode($incident['payload'], true);
             $message = is_array($payload) && !empty($payload['details']) ? (string) $payload['details'] : __('Incident details unavailable', 'website-watchdog');
-            echo '<tr><td class="watchdog-primary"><a href="' . esc_url($this->incident_url($incident['id'])) . '">' . esc_html($message) . '</a>';
+            $severity = is_array($payload) && isset($payload['severity']) && is_string($payload['severity']) ? $payload['severity'] : '';
+            $known_severity = isset($severity_labels[$severity]);
+            echo '<tr><td><span class="watchdog-badge' . ($known_severity ? ' watchdog-severity-' . esc_attr($severity) : '') . '">' . esc_html($known_severity ? $severity_labels[$severity] : __('Unknown', 'website-watchdog')) . '</span></td><td class="watchdog-primary"><a href="' . esc_url($this->incident_url($incident['id'])) . '">' . esc_html($message) . '</a>';
             if (is_array($payload) && !empty($payload['source'])) {
                 echo '<span class="watchdog-secondary">' . esc_html((string) $payload['source']) . '</span>';
             }

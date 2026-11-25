@@ -240,6 +240,7 @@ class ClientTest extends TestCase
         $payload = [
             'event_id' => 'fa83b5df-c9ec-47dc-95fc-ab190da376ca', 'local_id' => $id,
             'revision' => 1, 'status' => 'new', 'mute_future' => false,
+            'severity' => 'critical',
             'last_seen_at' => '2026-11-25T12:00:00+00:00',
             'incident_url' => 'https://site.test/wp-admin/admin.php?page=website-watchdog-settings&tab=incidents&incident_id=' . $id,
             'recent_changes' => [], 'notify' => true,
@@ -249,10 +250,15 @@ class ClientTest extends TestCase
         $bad = $payload;
         $bad['incident_url'] .= '&page=private-canary';
         $this->assertSame(Client::RESULT_DROP, $client->deliver($bad, '/v1/incidents/local'));
+        $bad = $payload;
+        $bad['severity'] = 'private-canary';
+        $this->assertSame(Client::RESULT_DROP, $client->deliver($bad, '/v1/incidents/local'));
         $this->assertSame([], WPState::$remote_calls);
         $this->assertSame(Client::RESULT_RETRY, $client->deliver($payload, '/v1/incidents/local'));
         $this->assertCount(1, WPState::$remote_calls);
         $this->respond(['response' => ['code' => 202], 'body' => '{"status":"queued"}']);
+        $this->assertSame(Client::RESULT_OK, $client->deliver($payload, '/v1/incidents/local'));
+        unset($payload['severity']);
         $this->assertSame(Client::RESULT_OK, $client->deliver($payload, '/v1/incidents/local'));
     }
 

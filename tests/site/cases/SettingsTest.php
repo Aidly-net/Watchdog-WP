@@ -403,6 +403,26 @@ class SettingsTest extends TestCase
         $this->assert_contains('No incident history available yet.', $out);
     }
 
+    public function test_incident_history_displays_severity_in_first_column(): void
+    {
+        $this->as_admin();
+        $store = new Store();
+        foreach (['info', 'warning', 'error', 'critical', ''] as $severity) {
+            $payload = ['source' => 'example.php', 'details' => 'Incident ' . $severity];
+            if ('' !== $severity) {
+                $payload['severity'] = $severity;
+            }
+            $this->assert_true($store->capture(['timestamp' => gmdate('c'), 'payload' => $payload]));
+        }
+        $this->set_request(['tab' => 'incidents']);
+        $out = $this->output('render_page');
+        $this->assert_contains('<thead><tr><th scope="col">Severity</th><th scope="col">Incident</th>', $out);
+        foreach (['info' => 'Info', 'warning' => 'Warning', 'error' => 'Error', 'critical' => 'Critical'] as $severity => $label) {
+            $this->assert_contains('<tr><td><span class="watchdog-badge watchdog-severity-' . $severity . '">' . $label . '</span></td><td class="watchdog-primary">', $out);
+        }
+        $this->assert_contains('<tr><td><span class="watchdog-badge">Unknown</span></td><td class="watchdog-primary">', $out);
+    }
+
     public function test_event_history_and_details_escape_custom_data(): void
     {
         $this->as_admin();
