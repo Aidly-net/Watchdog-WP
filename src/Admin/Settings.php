@@ -372,8 +372,8 @@ class Settings
         $tabs = [
             'settings' => __('Settings', 'website-watchdog'),
             'test' => __('Send Test Data', 'website-watchdog'),
-            'incidents' => __('Incident History', 'website-watchdog'),
             'events' => __('Event History', 'website-watchdog'),
+            'incidents' => __('Incident History', 'website-watchdog'),
         ];
 
         echo '<nav class="nav-tab-wrapper">';

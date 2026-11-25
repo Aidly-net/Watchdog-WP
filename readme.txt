@@ -52,7 +52,7 @@ The plugin also checks GitHub releases for updates. These requests are made to G
 
 Incidents are retained locally for 30 days after they were last seen; events and changes are retained for 30 days after they occurred. Cleanup runs through WP-Cron and may be delayed on low-traffic sites. Minimal incident records remain in the service after local expiry; their WordPress links will no longer show the incident.
 
-Incident updates are queued locally and retried through WP-Cron. A separate offline queue for site-change events holds up to 50 events or 256 KB and may discard older events. Delivery and retry timing depend on WP-Cron and a verified API key. In rare cases, an alert may be delivered more than once if delivery succeeds but confirmation is not recorded.
+Incident updates are queued locally. When a new incident, reopening, or severity change is saved, the plugin immediately attempts delivery if the API key is verified; this synchronous request has a 2-second timeout. Failed attempts and other status updates are retried through WP-Cron, whose timing depends on site traffic and configuration. A separate offline queue for site-change events holds up to 50 events or 256 KB and may discard older events. In rare cases, an alert may be delivered more than once if delivery succeeds but confirmation is not recorded.
 
 WordPress is authoritative for incident status. Status updates initiated from the service require a publicly reachable HTTPS WordPress REST endpoint with a trusted certificate. The incident administrator link must use the same origin as the registered site URL.
 

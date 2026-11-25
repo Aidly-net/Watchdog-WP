@@ -148,18 +148,44 @@ class LocalStoreTest extends TestCase
         $this->assert_count(0, $store->list_incidents(1));
     }
 
+    public function test_capture_delivers_immediately_without_private_data_or_duplicate_reports(): void
+    {
+        global $wpdb;
+        $store = new Store();
+        $this->configure_verified_key();
+        $this->mock_http_response(202, '{"status":"queued"}');
+        $event = [
+            'timestamp' => gmdate('c'),
+            'payload' => ['severity' => 'critical', 'source' => 'PRIVATE_SOURCE_CANARY', 'details' => 'PRIVATE_MESSAGE_CANARY'],
+        ];
+        $this->assert_true($store->capture($event));
+        $this->assert_same('1', $wpdb->get_var('SELECT COUNT(*) FROM ' . $wpdb->prefix . 'watchdog_incidents'));
+        $this->assert_same('0', $wpdb->get_var('SELECT COUNT(*) FROM ' . $wpdb->prefix . 'watchdog_outbox'));
+        $this->assert_count(1, $this->http_calls());
+        $call = $this->last_http_call();
+        $this->assert_contains('/incidents/local', $call['url']);
+        $this->assert_same(2, $call['args']['timeout']);
+        $this->assert_not_contains('PRIVATE_', $call['args']['body']);
+        $this->assert_same('critical', $this->last_http_json()['severity']);
+        $this->assert_true($store->capture($event));
+        $this->assert_count(1, $this->http_calls());
+    }
+
     public function test_outbox_retries_then_sends_only_minimal_data(): void
     {
         global $wpdb;
         $store = new Store();
         $this->configure_verified_key();
+        $this->mock_http_error('offline');
         $this->assert_true($store->capture([
             'timestamp' => gmdate('c'),
             'payload' => ['source' => 'PRIVATE_SOURCE_CANARY', 'details' => 'PRIVATE_MESSAGE_CANARY'],
         ]));
-        $this->mock_http_error('offline');
-        $store->flush_outbox();
+        $this->assert_count(1, $this->http_calls());
+        $this->assert_not_empty(wp_next_scheduled('website_watchdog_flush_local'));
         $table = $wpdb->prefix . 'watchdog_outbox';
+        $this->assert_same('1', $wpdb->get_var("SELECT COUNT(*) FROM $table"));
+        $store->flush_outbox();
         $this->assert_same('1', $wpdb->get_var("SELECT COUNT(*) FROM $table"));
         $this->mock_http(static function ($url) {
             return false !== strpos($url, '/sites/verify')
@@ -171,6 +197,62 @@ class LocalStoreTest extends TestCase
         $call = $this->last_http_call();
         $this->assert_contains('/incidents/local', $call['url']);
         $this->assert_not_contains('PRIVATE_', $call['args']['body']);
+    }
+
+    public function test_severity_changes_and_reopened_incidents_deliver_immediately(): void
+    {
+        $store = new Store();
+        $this->configure_verified_key();
+        $fallback_scheduled = false;
+        $this->mock_http(static function () use (&$fallback_scheduled) {
+            $fallback_scheduled = (bool) wp_next_scheduled('website_watchdog_flush_local');
+            return \WebsiteWatchdog\Agent\SelfTest\Sandbox::response(202);
+        });
+        $event = [
+            'timestamp' => gmdate('c'),
+            'payload' => ['severity' => 'warning', 'source' => 'example.php', 'details' => 'private'],
+        ];
+        $this->assert_true($store->capture($event));
+        $this->assert_true($fallback_scheduled);
+        $event['payload']['severity'] = 'critical';
+        $this->assert_true($store->capture($event));
+        $this->assert_count(2, $this->http_calls());
+        $this->assert_false($this->last_http_json()['notify']);
+        $this->assert_same('critical', $this->last_http_json()['severity']);
+        $id = $store->list_incidents(1)[0]['id'];
+        $this->assert_same('ok', $store->update_status($id, 2, 'resolved', false));
+        $this->assert_count(2, $this->http_calls());
+        $this->assert_true($store->capture($event));
+        $this->assert_count(3, $this->http_calls());
+        $this->assert_true($this->last_http_json()['notify']);
+        $this->assert_same('reopened', $this->last_http_json()['status']);
+    }
+
+    public function test_immediate_attempt_leaves_backlog_and_requires_http_202(): void
+    {
+        global $wpdb;
+        $store = new Store();
+        delete_option('website_watchdog_api_key');
+        $this->assert_true($store->capture([
+            'timestamp' => gmdate('c'),
+            'payload' => ['source' => 'first.php', 'details' => 'first'],
+        ]));
+        $this->assert_count(0, $this->http_calls());
+        $this->configure_verified_key();
+        $this->mock_http_response(200);
+        $this->assert_true($store->capture([
+            'timestamp' => gmdate('c'),
+            'payload' => ['source' => 'second.php', 'details' => 'second'],
+        ]));
+        $this->assert_count(1, $this->http_calls());
+        $this->assert_same('2', $wpdb->get_var('SELECT COUNT(*) FROM ' . $wpdb->prefix . 'watchdog_outbox'));
+        $this->mock_http_response(202);
+        $this->assert_true($store->capture([
+            'timestamp' => gmdate('c'),
+            'payload' => ['source' => 'third.php', 'details' => 'third'],
+        ]));
+        $this->assert_count(2, $this->http_calls());
+        $this->assert_same('2', $wpdb->get_var('SELECT COUNT(*) FROM ' . $wpdb->prefix . 'watchdog_outbox'));
     }
 
     public function test_rest_status_requires_key_and_checks_revision(): void

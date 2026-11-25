@@ -140,9 +140,13 @@ class Store
             $notify = $reopened;
             $sync = $reopened || $severity_changed;
         }
-        if ($sync && !$this->enqueue($row, $notify)) {
-            $wpdb->query('ROLLBACK');
-            return false;
+        $event_id = null;
+        if ($sync) {
+            $event_id = $this->enqueue($row, $notify);
+            if (null === $event_id) {
+                $wpdb->query('ROLLBACK');
+                return false;
+            }
         }
         if (false === $wpdb->query('COMMIT')) {
             error_log('Website Watchdog could not commit a local incident.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -150,6 +154,7 @@ class Store
         }
         if ($sync) {
             $this->schedule_flush();
+            $this->deliver_now($event_id);
         }
         return true;
     }
@@ -176,19 +181,19 @@ class Store
         return $changes;
     }
 
-    private function enqueue(array $incident, bool $notify): bool
+    private function enqueue(array $incident, bool $notify): ?string
     {
         global $wpdb;
         $local_payload = json_decode($incident['payload'], true);
         if (!is_array($local_payload) || (isset($local_payload['severity']) && !in_array($local_payload['severity'], self::SEVERITIES, true))) {
             error_log('Website Watchdog could not read local incident severity.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            return false;
+            return null;
         }
         $time = strtotime($incident['last_seen'] . ' UTC');
         $changes = [];
         $recent = $this->recent_changes($time);
         if (null === $recent) {
-            return false;
+            return null;
         }
         foreach ($recent as $change) {
             $payload = $change['payload'];
@@ -232,9 +237,9 @@ class Store
             'event_id' => $event_id, 'payload' => $json, 'created_at' => gmdate('Y-m-d H:i:s'),
         ], ['%s', '%s', '%s'])) {
             error_log('Website Watchdog could not queue a local incident update.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            return false;
+            return null;
         }
-        return true;
+        return $event_id;
     }
 
     private function limit_text(string $text, int $length): string
@@ -258,6 +263,40 @@ class Store
     {
         if (!wp_next_scheduled('website_watchdog_flush_local')) {
             wp_schedule_single_event(time() + 10, 'website_watchdog_flush_local');
+        }
+    }
+
+    private function deliver_now(string $event_id): void
+    {
+        global $wpdb;
+        static $delivering = false;
+        if ($delivering || '' === (string) get_option('website_watchdog_api_key', '')
+            || !get_option('website_watchdog_api_key_verified', false)) {
+            return;
+        }
+        $table = $wpdb->prefix . 'watchdog_outbox';
+        $row = $wpdb->get_row($wpdb->prepare("SELECT id, payload FROM $table WHERE event_id = %s", $event_id), ARRAY_A);
+        if (!is_array($row)) {
+            if ($wpdb->last_error) {
+                error_log('Website Watchdog could not read a local incident update.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
+            return;
+        }
+        $payload = json_decode($row['payload'], true);
+        if (!is_array($payload)) {
+            error_log('Website Watchdog found an invalid local outbox item.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return;
+        }
+        $delivering = true;
+        try {
+            $result = (new Client())->deliver($payload, '/' . WEBSITE_WATCHDOG_API_VERSION . '/incidents/local');
+        } finally {
+            $delivering = false;
+        }
+        if (Client::RESULT_OK !== $result) {
+            error_log('Website Watchdog could not deliver a local incident update: ' . $result); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        } elseif (false === $wpdb->delete($table, ['id' => $row['id']], ['%d'])) {
+            error_log('Website Watchdog could not remove a delivered local update.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
         }
     }
 

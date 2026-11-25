@@ -19,7 +19,8 @@ Website Watchdog is an independent software project operated by Aidly.net.
 - Caps outgoing state events at 32 KB; incidents are grouped locally.
 - Limits incident source, URL and metadata to 2,002 JSON bytes each, and stack traces to 8,192 JSON bytes. Long traces retain the first 10 and last 5 frames. Incident messages use the remaining event budget.
 - Browser reports that exceed the 16 KiB endpoint limit are trimmed before sending, preserving the first 10 and last 5 stack entries when available.
-- Uses a 2-second delivery timeout and an exponential backoff (30 s up to 1 h) after failed deliveries, so an outage does not slow requests; queued events are retried by cron in batches of 10.
+- Attempts incident delivery immediately after saving, with a 2-second HTTP timeout; a local outbox and WP-Cron retry failed updates in batches of 10.
+- Uses exponential backoff (30 s up to 1 h) for failed state-event deliveries.
 - Provides an administrator settings page, test event forms, and incident history.
 - Retains incidents for 30 days after last seen and changes for 30 days; removes local data on uninstall.
 
@@ -60,7 +61,9 @@ and versions may reveal installed software.
 
 WordPress remains authoritative for status. Portal actions require the site's
 public HTTPS REST endpoint and a trusted certificate. WordPress-to-SaaS
-updates use WP-Cron, which can be delayed; an expired local incident link
+incident captures attempt delivery immediately when the API key is verified.
+Failed delivery and other outbound status updates use WP-Cron, which can be
+delayed; an expired local incident link
 reports that the incident is unavailable. Existing historical SaaS incidents
 are not deleted. The administrator link must have the same origin as the
 registered site URL. Legacy incident endpoints are disabled.

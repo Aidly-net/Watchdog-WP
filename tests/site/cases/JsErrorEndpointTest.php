@@ -115,7 +115,7 @@ class JsErrorEndpointTest extends TestCase
         $this->assert_status($second, 200);
         $this->assert_status($other, 200);
         $this->assert_count(2, $this->local_payloads('incidents'));
-        $this->assert_count(0, $this->http_calls());
+        $this->assert_count(2, $this->http_calls());
     }
 
     public function test_page_url_and_stack_are_forwarded(): void

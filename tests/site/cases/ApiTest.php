@@ -62,7 +62,8 @@ class ApiTest extends TestCase
 
         $this->assert_true(Api::capture_incident('boom', 'critical', 'cron'));
         $this->assert_same('boom', $this->last_local_payload('incidents')['details']);
-        $this->assert_count(0, $this->http_calls());
+        $this->assert_count(1, $this->http_calls());
+        $this->assert_contains('/incidents/local', $this->last_http_call()['url']);
     }
 
     public function test_global_helper_functions_delegate_to_api(): void
