@@ -5,6 +5,7 @@ namespace WebsiteWatchdog\Agent\Tests\Unit;
 use WebsiteWatchdog\Agent\IncidentPayload;
 use WebsiteWatchdog\Agent\Http\Client;
 use WebsiteWatchdog\Agent\Http\PayloadLimiter;
+use WebsiteWatchdog\Agent\Http\Queue;
 use WebsiteWatchdog\Agent\Tests\TestCase;
 use WP_Error;
 use WPState;
@@ -107,9 +108,32 @@ class ClientTest extends TestCase
         $this->assertArrayNotHasKey('website_watchdog_offline_queue', WPState::$options);
     }
 
+    public function test_dispatch_is_disabled_in_email_mode(): void
+    {
+        WPState::$options['website_watchdog_api_key'] = 'k';
+        WPState::$options['website_watchdog_api_key_verified'] = true;
+
+        $this->assertFalse((new Client())->dispatch(['a' => 1]));
+        $this->assertSame([], WPState::$remote_calls);
+        $this->assertArrayNotHasKey('website_watchdog_offline_queue', WPState::$options);
+    }
+
+    public function test_email_mode_preserves_existing_cloud_queue_without_sending(): void
+    {
+        $queue = [['event_type' => 'state_change', 'payload' => ['action' => 'updated']]];
+        WPState::$options['website_watchdog_api_key'] = 'k';
+        WPState::$options['website_watchdog_api_key_verified'] = true;
+        WPState::$options['website_watchdog_offline_queue'] = $queue;
+
+        $this->assertSame($queue, (new Queue())->flush());
+        $this->assertSame($queue, WPState::$options['website_watchdog_offline_queue']);
+        $this->assertSame([], WPState::$remote_calls);
+    }
+
     public function test_dispatch_with_unverified_key_queues_event(): void
     {
         WPState::$options['website_watchdog_api_key'] = 'k';
+        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
 
         $this->assertFalse((new Client())->dispatch(['a' => 1]));
         $this->assertCount(1, WPState::$options['website_watchdog_offline_queue']);
@@ -119,6 +143,7 @@ class ClientTest extends TestCase
     public function test_dispatch_unverified_without_queueing(): void
     {
         WPState::$options['website_watchdog_api_key'] = 'k';
+        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
 
         (new Client())->dispatch(['a' => 1], false);
 
@@ -227,6 +252,7 @@ class ClientTest extends TestCase
     public function test_unverified_legacy_incidents_are_not_queued(): void
     {
         WPState::$options['website_watchdog_api_key'] = 'k';
+        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
         $event = ['severity' => 'error', 'source' => 'cron', 'details' => 'private-canary'];
 
         $this->assertFalse((new Client())->dispatch($event, true, '/v1/incidents/on-demand'));
@@ -236,6 +262,7 @@ class ClientTest extends TestCase
 
     public function test_local_delivery_rejects_diagnostics_at_network_boundary(): void
     {
+        $this->configureVerifiedKey();
         $id = 'c505e5a5-07e0-4b0d-9d8e-26e044580fc0';
         $payload = [
             'event_id' => 'fa83b5df-c9ec-47dc-95fc-ab190da376ca', 'local_id' => $id,

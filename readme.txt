@@ -8,13 +8,13 @@ Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Capture WordPress incidents locally and receive alerts with links to the details on your site.
+Capture WordPress incidents locally and receive minimal alerts by WordPress e-mail or Website Watchdog Cloud.
 
 == Description ==
 
 Website Watchdog monitors PHP fatal errors, uncaught exceptions, browser JavaScript errors, and WordPress state changes. Incidents are captured, grouped, and correlated with recent changes on your WordPress site.
 
-The Website Watchdog service receives minimal incident notifications and can deliver generic alerts through configured channels such as Slack, email, or webhooks. Incident details are viewed in WordPress, not sent to the service.
+Choose E-mail to send minimal incident alerts through WordPress mail, or Slack/Webhook to connect Website Watchdog Cloud for remote monitoring and notifications. Incident details remain on your WordPress site.
 
 = Features =
 
@@ -22,8 +22,8 @@ The Website Watchdog service receives minimal incident notifications and can del
 * Records plugin and theme installations and updates, plugin activations and deactivations, theme switches, and WordPress core updates.
 * Groups repeated incidents and shows potentially related changes from the preceding 15 minutes.
 * Provides administrator-only incident and event history tables and detailed views, including incident status and mute controls.
-* Sends minimal notifications for new or reopened incident groups and synchronizes incident status with the service.
-* Sends scheduled heartbeats and provides an authenticated health endpoint for availability checks.
+* Sends minimal notifications for new or reopened incident groups using either WordPress mail or Website Watchdog Cloud.
+* Sends scheduled heartbeats in Slack/Webhook mode and provides an authenticated health endpoint for availability checks.
 * Supports locally stored custom events and incidents through PHP helper functions.
 * Shows a post-activation setup screen and offers optional anonymous version reporting.
 * Retries failed deliveries using WP-Cron and removes local data on uninstall.
@@ -32,7 +32,7 @@ The Website Watchdog service receives minimal incident notifications and can del
 
 = Third-Party Service Disclosure =
 
-The plugin uses the external Website Watchdog service to record site changes, monitor availability, and deliver configured alerts. A verified API key is required for delivery.
+Website Watchdog Cloud is optional. Select Slack/Webhook in **Website Watchdog > Notification** and use a verified API key for remote monitoring, site-change reporting, and Cloud alerts. E-mail mode sends incident alerts locally through WordPress mail. Optional anonymous version reports are sent only after consent, regardless of notification method.
 
 * **Service Name:** Website Watchdog API
 * **Service URL:** https://wd.aidly.net/
@@ -41,12 +41,12 @@ The plugin uses the external Website Watchdog service to record site changes, mo
 
 **Data sent to Website Watchdog:**
 
-* **Connection and heartbeat:** The site URL, API key for authentication, and plugin, PHP, and WordPress versions.
-* **Site changes:** Plugin, theme, and core state-change events, including relevant names and details, are sent separately from incident notifications.
-* **Incident notifications and status:** Opaque identifiers, severity, revision, status, mute setting, last-seen time, an administrator incident link, and up to 20 approved recent plugin/theme changes (actions, names, timestamps, and available versions). The service uses these to deliver generic alerts and synchronize status and severity.
-* **Optional anonymous usage reports:** Only after opt-in, a random installation ID, WordPress/plugin/PHP versions, and whether the site has a verified Cloud connection. Reports do not include the site URL, API key, incident details, error messages, or custom event data. Reporting can be turned off in Cloud Settings.
+* **Cloud connection and heartbeat:** In Slack/Webhook mode, the site URL, API key for authentication, and plugin, PHP, and WordPress versions.
+* **Site changes:** In Slack/Webhook mode, plugin, theme, and core state-change events, including relevant names and details, are sent separately from incident notifications.
+* **Cloud incident notifications and status:** In Slack/Webhook mode, opaque identifiers, severity, revision, status, mute setting, last-seen time, an administrator incident link, and up to 20 approved recent plugin/theme changes (actions, names, timestamps, and available versions). The service uses these to deliver generic alerts and synchronize status and severity.
+* **Optional anonymous usage reports:** Only after opt-in, a random installation ID, WordPress/plugin/PHP versions, and whether Cloud notifications are enabled. Reports do not include the site URL, API key, incident details, error messages, or custom event data. Reporting consent can be changed on the Notification tab regardless of the notification method.
 
-Incident messages, sources, URLs, stack traces, and custom events remain on the WordPress site. Custom events are not included in the recent changes sent with incident notifications. The plugin redacts values under sensitive field names and removes URL query strings from sanitized data, but this is not a guarantee that all sensitive information is removed from free text or local records.
+Incident messages, sources, URLs, stack traces, and custom events remain on the WordPress site. E-mail alerts contain only generic wording, severity, and a local administrator link. Custom events are not included in Cloud incident notifications. The plugin redacts values under sensitive field names and removes URL query strings from sanitized data, but this is not a guarantee that all sensitive information is removed from free text or local records.
 
 The plugin also checks GitHub releases for updates. These requests are made to GitHub and disclose the site's server IP address to GitHub. See https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement.
 
@@ -54,7 +54,7 @@ The plugin also checks GitHub releases for updates. These requests are made to G
 
 Incidents are retained locally for 30 days after they were last seen; events and changes are retained for 30 days after they occurred. Cleanup runs through WP-Cron and may be delayed on low-traffic sites. SaaS event records are purged 12 months after occurrence and incident records 12 months after last seen; their WordPress links may be unavailable after the local record expires. Opt-in usage reports are refreshed every 30 days and purged 12 months after the last report.
 
-Incident updates are queued locally. When a new incident, reopening, or severity change is saved, the plugin immediately attempts delivery if the API key is verified; this synchronous request has a 2-second timeout. Failed attempts and other status updates are retried through WP-Cron, whose timing depends on site traffic and configuration. A separate offline queue for site-change events holds up to 50 events or 256 KB and may discard older events. In rare cases, an alert may be delivered more than once if delivery succeeds but confirmation is not recorded.
+In Cloud mode, incident updates are queued locally. When a new incident, reopening, or severity change is saved, the plugin immediately attempts delivery if the API key is verified; this synchronous request has a 2-second timeout. Failed attempts and other status updates are retried through WP-Cron, whose timing depends on site traffic and configuration. E-mail mode uses `wp_mail()` after the local incident is saved; failures are logged and not retried. The Cloud offline queue for site-change events holds up to 50 events or 256 KB and may discard older events. In rare cases, a Cloud alert may be delivered more than once if delivery succeeds but confirmation is not recorded.
 
 WordPress is authoritative for incident status. Status updates initiated from the service require a publicly reachable HTTPS WordPress REST endpoint with a trusted certificate. The incident administrator link must use the same origin as the registered site URL.
 
@@ -64,8 +64,8 @@ Uninstalling the plugin removes its local incident, event, and outbox tables, se
 
 1. Upload the `website-watchdog` folder to the `/wp-content/plugins/` directory.
 2. Activate the plugin through the 'Plugins' menu in WordPress and complete the welcome screen.
-3. Optionally connect Website Watchdog Cloud and enter the API key generated in the portal at https://wd.aidly.net/settings/api-keys.
-4. Use **Send Test Data** to record a test event or incident, then inspect **Event History** or **Incident History**. Configure alert channels in the service.
+3. Configure **Website Watchdog > Notification**: enter a recipient e-mail address, or select Slack/Webhook and enter an API key generated in the portal at https://wd.aidly.net/settings/api-keys.
+4. Use **Send Test Data** to record a test event or incident, then inspect **Event History** or **Incident History**. Configure Cloud alert channels in the service when using Slack/Webhook mode.
 
 == Frequently Asked Questions ==
 

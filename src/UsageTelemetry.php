@@ -12,6 +12,8 @@ class UsageTelemetry
         add_filter('cron_schedules', [self::class, 'add_monthly_schedule']);
         add_action(self::REPORT_HOOK, [self::class, 'send_report']);
         add_action(self::FORGET_HOOK, [self::class, 'forget_report']);
+        add_action('add_option_website_watchdog_usage_telemetry', [self::class, 'consent_added'], 10, 2);
+        add_action('update_option_website_watchdog_usage_telemetry', [self::class, 'consent_updated'], 10, 2);
 
         if (get_option('website_watchdog_usage_telemetry', false) && !wp_next_scheduled(self::REPORT_HOOK)) {
             wp_schedule_event(time() + MONTH_IN_SECONDS, 'website_watchdog_monthly', self::REPORT_HOOK);
@@ -34,9 +36,21 @@ class UsageTelemetry
 
     public static function set_consent(bool $consent): void
     {
-        $was_consented = (bool) get_option('website_watchdog_usage_telemetry', false);
         update_option('website_watchdog_usage_telemetry', $consent ? 1 : 0, false);
+    }
 
+    public static function consent_added($option, $value): void
+    {
+        self::schedule_consent((bool) $value, false);
+    }
+
+    public static function consent_updated($old_value, $value): void
+    {
+        self::schedule_consent((bool) $value, (bool) $old_value);
+    }
+
+    private static function schedule_consent(bool $consent, bool $was_consented): void
+    {
         if ($consent) {
             wp_clear_scheduled_hook(self::FORGET_HOOK);
             if (!wp_next_scheduled(self::REPORT_HOOK)) {
@@ -72,7 +86,8 @@ class UsageTelemetry
             'wordpress_version' => sanitize_text_field((string) get_bloginfo('version')),
             'plugin_version' => WEBSITE_WATCHDOG_VERSION,
             'php_version' => PHP_VERSION,
-            'cloud_connected' => '' !== (string) get_option('website_watchdog_api_key', '')
+            'cloud_connected' => 'slack_webhook' === get_option('website_watchdog_notification_method', 'email')
+                && '' !== (string) get_option('website_watchdog_api_key', '')
                 && (bool) get_option('website_watchdog_api_key_verified', false),
         ];
     }

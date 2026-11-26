@@ -15,10 +15,12 @@ class WelcomeScreen
 
     public function redirect_after_activation(): void
     {
-        if (!get_option('website_watchdog_welcome_pending', false)
+        if (
+            !get_option('website_watchdog_welcome_pending', false)
             || !current_user_can('manage_options')
             || 'admin-post.php' === basename((string) ($_SERVER['PHP_SELF'] ?? ''))
-            || 'website-watchdog-welcome' === sanitize_key((string) ($_GET['page'] ?? ''))) {
+            || 'website-watchdog-welcome' === sanitize_key((string) ($_GET['page'] ?? ''))
+        ) {
             return;
         }
 
@@ -65,7 +67,7 @@ class WelcomeScreen
             wp_safe_redirect(admin_url('admin.php?page=website-watchdog-settings'));
             exit;
         }
-        ?>
+?>
         <div class="wrap watchdog-welcome">
             <h1><?php echo esc_html__('Website Watchdog is ready.', 'website-watchdog'); ?></h1>
             <p><?php echo esc_html__('Your site is being monitored locally.', 'website-watchdog'); ?></p>
@@ -85,13 +87,13 @@ class WelcomeScreen
                 <p class="description"><?php echo esc_html__('A random installation ID is used to count opt-in installations. Reports do not include your site URL or API key.', 'website-watchdog'); ?></p>
 
                 <h2><?php echo esc_html__('Want remote monitoring?', 'website-watchdog'); ?></h2>
-                <p><a class="button button-secondary" href="<?php echo esc_url(WEBSITE_WATCHDOG_URL . '/settings'); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__('Connect Website Watchdog Cloud', 'website-watchdog'); ?> &rarr;</a></p>
+                <p><a class="button button-secondary" href="<?php echo esc_url(WEBSITE_WATCHDOG_URL); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__('Connect Website Watchdog Cloud', 'website-watchdog'); ?> &rarr;</a></p>
 
                 <div class="watchdog-welcome-actions">
                     <?php submit_button(__('Done', 'website-watchdog'), 'primary', 'submit', false); ?>
                 </div>
             </form>
         </div>
-        <?php
+<?php
     }
 }

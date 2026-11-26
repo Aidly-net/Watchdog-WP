@@ -11,6 +11,12 @@ class QueueTest extends TestCase
 {
     private const KEY = 'website_watchdog_offline_queue';
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
+    }
+
     public function test_add_appends_payloads(): void
     {
         $queue = new Queue();

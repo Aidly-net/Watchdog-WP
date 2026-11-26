@@ -118,8 +118,9 @@ class Store
             error_log('Website Watchdog could not save a local incident.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             return false;
         }
+        $cloud_delivery = 'slack_webhook' === get_option('website_watchdog_notification_method', 'email');
         $notify = 1 === $inserted;
-        $sync = $notify;
+        $sync = $cloud_delivery && $notify;
         if (!$notify) {
             $reopened = 'resolved' === $row['status'] || ('muted' === $row['status'] && !(bool) $row['mute_future']);
             $previous = json_decode($row['payload'], true);
@@ -138,7 +139,7 @@ class Store
                 return false;
             }
             $notify = $reopened;
-            $sync = $reopened || $severity_changed;
+            $sync = $cloud_delivery && ($reopened || $severity_changed);
         }
         $event_id = null;
         if ($sync) {
@@ -151,6 +152,9 @@ class Store
         if (false === $wpdb->query('COMMIT')) {
             error_log('Website Watchdog could not commit a local incident.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             return false;
+        }
+        if ($notify && !$cloud_delivery) {
+            (new IncidentEmailNotifier())->send($row);
         }
         if ($sync) {
             $this->schedule_flush();
@@ -270,7 +274,8 @@ class Store
     {
         global $wpdb;
         static $delivering = false;
-        if ($delivering || '' === (string) get_option('website_watchdog_api_key', '')
+        if ($delivering || 'slack_webhook' !== get_option('website_watchdog_notification_method', 'email')
+            || '' === (string) get_option('website_watchdog_api_key', '')
             || !get_option('website_watchdog_api_key_verified', false)) {
             return;
         }
@@ -398,22 +403,32 @@ class Store
         $row['status'] = $status;
         $row['mute_future'] = 'muted' === $status && $mute_future ? 1 : 0;
         $row['revision'] = $revision + 1;
+        $cloud_delivery = 'slack_webhook' === get_option('website_watchdog_notification_method', 'email');
         $updated = $wpdb->update($table, [
             'status' => $status, 'mute_future' => $row['mute_future'], 'revision' => $row['revision'],
         ], ['id' => $id], ['%s', '%d', '%d'], ['%s']);
-        if (false === $updated || !$this->enqueue($row, false) || false === $wpdb->query('COMMIT')) {
+        if (false === $updated || ($cloud_delivery && !$this->enqueue($row, false))) {
             $wpdb->query('ROLLBACK');
             error_log('Website Watchdog could not update local incident status.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             return 'error';
         }
-        $this->schedule_flush();
+        if (false === $wpdb->query('COMMIT')) {
+            $wpdb->query('ROLLBACK');
+            error_log('Website Watchdog could not commit local incident status.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return 'error';
+        }
+        if ($cloud_delivery) {
+            $this->schedule_flush();
+        }
         return 'ok';
     }
 
     public function flush_outbox(): void
     {
         global $wpdb;
-        if (!$this->install() || '' === (string) get_option('website_watchdog_api_key', '')) {
+        if (!$this->install()
+            || 'slack_webhook' !== get_option('website_watchdog_notification_method', 'email')
+            || '' === (string) get_option('website_watchdog_api_key', '')) {
             return;
         }
         $table = $wpdb->prefix . 'watchdog_outbox';

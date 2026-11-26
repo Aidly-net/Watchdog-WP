@@ -125,6 +125,10 @@ class WPState
     public static $remote_handler = null;
     public static $local_changes = [];
     public static $local_incidents = [];
+    public static $mail_calls = [];
+    public static $mail_result = true;
+    public static $settings_errors = [];
+    public static $settings_fields = [];
 
     public static function reset(): void
     {
@@ -138,6 +142,10 @@ class WPState
         self::$remote_handler = null;
         self::$local_changes = [];
         self::$local_incidents = [];
+        self::$mail_calls = [];
+        self::$mail_result = true;
+        self::$settings_errors = [];
+        self::$settings_fields = [];
     }
 }
 
@@ -151,6 +159,19 @@ function add_filter($hook, $callback, $priority = 10, $args = 1)
     WPState::$filters[$hook][] = $callback;
 }
 
+function add_settings_section($id, $title, $callback, $page)
+{
+}
+
+function register_setting($group, $name, $args = [])
+{
+}
+
+function add_settings_field($id, $title, $callback, $page, $section = 'default', $args = [])
+{
+    WPState::$settings_fields[$id] = $args;
+}
+
 function get_option($name, $default = false)
 {
     return array_key_exists($name, WPState::$options) ? WPState::$options[$name] : $default;
@@ -158,7 +179,23 @@ function get_option($name, $default = false)
 
 function update_option($name, $value, $autoload = null)
 {
+    foreach (WPState::$filters['sanitize_option_' . $name] ?? [] as $callback) {
+        $value = $callback($value);
+    }
+    $exists = array_key_exists($name, WPState::$options);
+    $old_value = $exists ? WPState::$options[$name] : false;
+    if ($exists && $old_value === $value) {
+        return false;
+    }
     WPState::$options[$name] = $value;
+    $hook = ($exists ? 'update_option_' : 'add_option_') . $name;
+    foreach (WPState::$actions[$hook] ?? [] as $callback) {
+        if ($exists) {
+            $callback($old_value, $value, $name);
+        } else {
+            $callback($name, $value);
+        }
+    }
 
     return true;
 }
@@ -214,6 +251,42 @@ function wp_remote_retrieve_body($response)
 function wp_json_encode($data, $flags = 0)
 {
     return json_encode($data, $flags);
+}
+
+function wp_mail($to, $subject, $message, $headers = [], $attachments = [])
+{
+    WPState::$mail_calls[] = compact('to', 'subject', 'message', 'headers', 'attachments');
+    return WPState::$mail_result;
+}
+
+function admin_url($path = '')
+{
+    return 'https://site.test/wp-admin/' . ltrim($path, '/');
+}
+
+function add_query_arg($args, $url)
+{
+    return $url . (false === strpos($url, '?') ? '?' : '&') . http_build_query($args);
+}
+
+function sanitize_key($key)
+{
+    return strtolower(preg_replace('/[^a-z0-9_\-]/', '', (string) $key));
+}
+
+function sanitize_email($email)
+{
+    return filter_var(trim((string) $email), FILTER_SANITIZE_EMAIL);
+}
+
+function is_email($email)
+{
+    return is_string($email) && false !== filter_var($email, FILTER_VALIDATE_EMAIL);
+}
+
+function add_settings_error($setting, $code, $message, $type = 'error')
+{
+    WPState::$settings_errors[] = compact('setting', 'code', 'message', 'type');
 }
 
 function wp_parse_url($url)

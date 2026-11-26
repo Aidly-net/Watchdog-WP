@@ -5,7 +5,6 @@ namespace WebsiteWatchdog\Agent\Admin;
 use WebsiteWatchdog\Agent\Api;
 use WebsiteWatchdog\Agent\Http\Client;
 use WebsiteWatchdog\Agent\Trappers\ErrorTrapper;
-use WebsiteWatchdog\Agent\UsageTelemetry;
 
 class Settings
 {
@@ -46,6 +45,13 @@ class Settings
         $api_key = is_string($value) ? trim(wp_unslash($value)) : '';
         $api_key = sanitize_text_field($api_key);
 
+        // WordPress updates every registered setting, including omitted disabled fields.
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing
+        if ($api_key === $old_value && isset($_POST['option_page']) && 'website_watchdog_settings_group' === $_POST['option_page']
+            && !isset($_POST['website_watchdog_api_key'])) {
+            return $api_key;
+        }
+
         if ('' === $api_key) {
             self::mark_api_key_verified(false);
 
@@ -85,6 +91,15 @@ class Settings
             [],
             WEBSITE_WATCHDOG_VERSION
         );
+        if ('toplevel_page_website-watchdog-settings' === $hook) {
+            wp_enqueue_script(
+                'website-watchdog-settings',
+                plugins_url('assets/js/settings.js', WEBSITE_WATCHDOG_PATH . 'website-watchdog.php'),
+                [],
+                WEBSITE_WATCHDOG_VERSION,
+                true
+            );
+        }
     }
 
     public function add_menu_page(): void
@@ -115,11 +130,24 @@ class Settings
 
         add_filter('pre_update_option_website_watchdog_api_key', [$this, 'validate_api_key_option'], 10, 3);
 
-        add_settings_section(
-            'website_watchdog_main',
-            __('Cloud Settings', 'website-watchdog'),
-            [$this, 'render_section_intro'],
-            'website_watchdog_settings_group'
+        add_settings_section('website_watchdog_main', __('Notification', 'website-watchdog'), null, 'website_watchdog_settings_group');
+
+        register_setting(
+            'website_watchdog_settings_group',
+            'website_watchdog_notification_method',
+            [
+                'sanitize_callback' => [$this, 'sanitize_notification_method'],
+                'default' => 'email',
+            ]
+        );
+
+        register_setting(
+            'website_watchdog_settings_group',
+            'website_watchdog_notification_email',
+            [
+                'sanitize_callback' => [$this, 'sanitize_notification_email'],
+                'default' => '',
+            ]
         );
 
         register_setting(
@@ -142,11 +170,38 @@ class Settings
         );
 
         add_settings_field(
+            'website_watchdog_notification_method',
+            __('Notification method', 'website-watchdog'),
+            [$this, 'render_notification_method_field'],
+            'website_watchdog_settings_group',
+            'website_watchdog_main'
+        );
+
+        add_settings_field(
+            'website_watchdog_notification_email',
+            __('Recipient e-mail address', 'website-watchdog'),
+            [$this, 'render_notification_email_field'],
+            'website_watchdog_settings_group',
+            'website_watchdog_main',
+            ['class' => 'watchdog-email-only']
+        );
+
+        add_settings_field(
+            'website_watchdog_cloud_intro',
+            '',
+            [$this, 'render_section_intro'],
+            'website_watchdog_settings_group',
+            'website_watchdog_main',
+            ['class' => 'watchdog-cloud-only']
+        );
+
+        add_settings_field(
             'website_watchdog_api_key',
             __('API Key', 'website-watchdog'),
             [$this, 'render_api_key_field'],
             'website_watchdog_settings_group',
-            'website_watchdog_main'
+            'website_watchdog_main',
+            ['class' => 'watchdog-cloud-only']
         );
 
         add_settings_field(
@@ -158,12 +213,76 @@ class Settings
         );
     }
 
+    public function sanitize_notification_method($value): string
+    {
+        $method = is_string($value) ? sanitize_key(wp_unslash($value)) : '';
+        if (in_array($method, ['email', 'slack_webhook'], true)) {
+            return $method;
+        }
+
+        add_settings_error(
+            'website_watchdog_notification_method',
+            'invalid_method',
+            __('Select a valid notification method.', 'website-watchdog')
+        );
+        return (string) get_option('website_watchdog_notification_method', 'email');
+    }
+
+    public function sanitize_notification_email($value): string
+    {
+        if (null === $value) {
+            return (string) get_option('website_watchdog_notification_email', '');
+        }
+        $email = is_string($value) ? sanitize_email(trim(wp_unslash($value))) : '';
+        $submitted_method = isset($_POST['website_watchdog_notification_method'])
+            ? $_POST['website_watchdog_notification_method'] // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            : null;
+        $method = is_string($submitted_method)
+            ? sanitize_key(wp_unslash($submitted_method))
+            : get_option('website_watchdog_notification_method', 'email');
+
+        if ('email' === $method && '' === $email) {
+            add_settings_error(
+                'website_watchdog_notification_email',
+                'missing_recipient',
+                __('Enter a recipient e-mail address for e-mail notifications.', 'website-watchdog')
+            );
+            return (string) get_option('website_watchdog_notification_email', '');
+        }
+        if ('' !== $email && !is_email($email)) {
+            add_settings_error(
+                'website_watchdog_notification_email',
+                'invalid_recipient',
+                __('Enter a valid recipient e-mail address.', 'website-watchdog')
+            );
+            return (string) get_option('website_watchdog_notification_email', '');
+        }
+
+        return $email;
+    }
+
+    public function render_notification_method_field(): void
+    {
+        $method = get_option('website_watchdog_notification_method', 'email');
+        echo '<select id="website_watchdog_notification_method" name="website_watchdog_notification_method">';
+        echo '<option value="email" ' . selected($method, 'email', false) . '>' . esc_html__('E-mail', 'website-watchdog') . '</option>';
+        echo '<option value="slack_webhook" ' . selected($method, 'slack_webhook', false) . '>' . esc_html__('Slack/Webhook', 'website-watchdog') . '</option>';
+        echo '</select>';
+    }
+
+    public function render_notification_email_field(): void
+    {
+        $value = get_option('website_watchdog_notification_email', '');
+        echo '<input type="email" id="website_watchdog_notification_email" name="website_watchdog_notification_email" value="' . esc_attr($value) . '" class="regular-text" />';
+        echo '<p class="description">' . esc_html__('A minimal incident alert is sent using WordPress mail. Incident details stay on this site.', 'website-watchdog') . '</p>';
+    }
+
     public function sanitize_usage_telemetry($value): int
     {
-        $consent = in_array($value, [1, '1', true], true);
-        UsageTelemetry::set_consent($consent);
-
-        return $consent ? 1 : 0;
+        if (null === $value) {
+            return (int) (bool) get_option('website_watchdog_usage_telemetry', false);
+        }
+        return in_array($value, [1, '1', true], true) ? 1 : 0;
     }
 
     public function render_usage_telemetry_field(): void
@@ -178,6 +297,9 @@ class Settings
 
     public function sanitize_api_key($value): string
     {
+        if (null === $value) {
+            return (string) get_option('website_watchdog_api_key', '');
+        }
         $value = is_string($value) ? trim(wp_unslash($value)) : '';
 
         return sanitize_text_field($value);
@@ -202,7 +324,8 @@ class Settings
 
     public function render_verification_notice(): void
     {
-        if (!current_user_can('manage_options') || self::is_api_key_verified()) {
+        if (!current_user_can('manage_options') || self::is_api_key_verified()
+            || 'slack_webhook' !== get_option('website_watchdog_notification_method', 'email')) {
             return;
         }
 
@@ -412,7 +535,7 @@ class Settings
             'events' => __('Event History', 'website-watchdog'),
             'incidents' => __('Incident History', 'website-watchdog'),
             'test' => __('Send Test Data', 'website-watchdog'),
-            'settings' => __('Cloud Settings', 'website-watchdog'),
+            'settings' => __('Notification', 'website-watchdog'),
         ];
 
         echo '<nav class="nav-tab-wrapper">';
@@ -439,13 +562,13 @@ class Settings
             <h1><?php echo esc_html__('Website Watchdog Settings', 'website-watchdog'); ?></h1>
             <?php $active_tab = $this->get_active_tab(); ?>
             <?php $this->render_tabs($active_tab); ?>
-            <?php if (!self::is_api_key_verified() && '' !== get_option('website_watchdog_api_key', '')) : ?>
+            <?php if ('slack_webhook' === get_option('website_watchdog_notification_method', 'email') && !self::is_api_key_verified() && '' !== get_option('website_watchdog_api_key', '')) : ?>
                 <div class="notice notice-warning inline">
                     <p><?php echo esc_html__('Warning: this API key is not verified. Events are paused until the key is corrected and re-verified.', 'website-watchdog'); ?></p>
                 </div>
             <?php endif; ?>
             <?php if ('settings' === $active_tab) : ?>
-                <?php settings_errors('website_watchdog_api_key'); ?>
+                <?php settings_errors(); ?>
                 <form method="post" action="options.php">
                     <?php settings_fields('website_watchdog_settings_group'); ?>
                     <?php wp_nonce_field('website_watchdog_settings_action', 'website_watchdog_settings_nonce'); ?>

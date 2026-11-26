@@ -10,6 +10,8 @@ function website_watchdog_uninstall(): void
         'website_watchdog_api_key',
         'website_watchdog_api_key_verified',
         'website_watchdog_site_id',
+        'website_watchdog_notification_method',
+        'website_watchdog_notification_email',
         'website_watchdog_offline_queue',
         'website_watchdog_local_schema_version',
         'website_watchdog_welcome_pending',

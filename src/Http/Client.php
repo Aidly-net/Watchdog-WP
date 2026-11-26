@@ -85,6 +85,9 @@ class Client
 
     public function dispatch(array $payload, bool $queue_on_failure = true, string $endpoint = '/' . WEBSITE_WATCHDOG_API_VERSION . '/events/ingest'): bool
     {
+        if (!$this->cloud_delivery_enabled()) {
+            return false;
+        }
         if ($this->is_legacy_incident($payload, $endpoint)) {
             error_log('Website Watchdog blocked a legacy incident payload from leaving the site.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             return false;
@@ -144,6 +147,9 @@ class Client
      */
     public function deliver(array $payload, string $endpoint = '/' . WEBSITE_WATCHDOG_API_VERSION . '/events/ingest'): string
     {
+        if (!$this->cloud_delivery_enabled()) {
+            return self::RESULT_DROP;
+        }
         if ($this->is_legacy_incident($payload, $endpoint)) {
             error_log('Website Watchdog blocked a legacy incident payload from leaving the site.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             return self::RESULT_DROP;
@@ -198,6 +204,11 @@ class Client
         }
 
         return self::RESULT_DROP;
+    }
+
+    private function cloud_delivery_enabled(): bool
+    {
+        return 'slack_webhook' === get_option('website_watchdog_notification_method', 'email');
     }
 
     private function is_legacy_incident(array $payload, string $endpoint): bool
