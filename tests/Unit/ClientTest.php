@@ -133,7 +133,7 @@ class ClientTest extends TestCase
     public function test_dispatch_with_unverified_key_queues_event(): void
     {
         WPState::$options['website_watchdog_api_key'] = 'k';
-        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
+        WPState::$options['website_watchdog_notification_method'] = 'cloud';
 
         $this->assertFalse((new Client())->dispatch(['a' => 1]));
         $this->assertCount(1, WPState::$options['website_watchdog_offline_queue']);
@@ -143,7 +143,7 @@ class ClientTest extends TestCase
     public function test_dispatch_unverified_without_queueing(): void
     {
         WPState::$options['website_watchdog_api_key'] = 'k';
-        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
+        WPState::$options['website_watchdog_notification_method'] = 'cloud';
 
         (new Client())->dispatch(['a' => 1], false);
 
@@ -252,7 +252,7 @@ class ClientTest extends TestCase
     public function test_unverified_legacy_incidents_are_not_queued(): void
     {
         WPState::$options['website_watchdog_api_key'] = 'k';
-        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
+        WPState::$options['website_watchdog_notification_method'] = 'cloud';
         $event = ['severity' => 'error', 'source' => 'cron', 'details' => 'private-canary'];
 
         $this->assertFalse((new Client())->dispatch($event, true, '/v1/incidents/on-demand'));

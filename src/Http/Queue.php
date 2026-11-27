@@ -37,7 +37,7 @@ class Queue
 
         update_option(self::TRANSIENT_KEY, $queue, false);
 
-        if ('slack_webhook' !== get_option('website_watchdog_notification_method', 'email')) {
+        if ('cloud' !== get_option('website_watchdog_notification_method', 'email')) {
             return $queue;
         }
 

@@ -118,7 +118,7 @@ class Store
             error_log('Website Watchdog could not save a local incident.'); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             return false;
         }
-        $cloud_delivery = 'slack_webhook' === get_option('website_watchdog_notification_method', 'email');
+        $cloud_delivery = 'cloud' === get_option('website_watchdog_notification_method', 'email');
         $notify = 1 === $inserted;
         $sync = $cloud_delivery && $notify;
         if (!$notify) {
@@ -274,7 +274,7 @@ class Store
     {
         global $wpdb;
         static $delivering = false;
-        if ($delivering || 'slack_webhook' !== get_option('website_watchdog_notification_method', 'email')
+        if ($delivering || 'cloud' !== get_option('website_watchdog_notification_method', 'email')
             || '' === (string) get_option('website_watchdog_api_key', '')
             || !get_option('website_watchdog_api_key_verified', false)) {
             return;
@@ -403,7 +403,7 @@ class Store
         $row['status'] = $status;
         $row['mute_future'] = 'muted' === $status && $mute_future ? 1 : 0;
         $row['revision'] = $revision + 1;
-        $cloud_delivery = 'slack_webhook' === get_option('website_watchdog_notification_method', 'email');
+        $cloud_delivery = 'cloud' === get_option('website_watchdog_notification_method', 'email');
         $updated = $wpdb->update($table, [
             'status' => $status, 'mute_future' => $row['mute_future'], 'revision' => $row['revision'],
         ], ['id' => $id], ['%s', '%d', '%d'], ['%s']);
@@ -427,7 +427,7 @@ class Store
     {
         global $wpdb;
         if (!$this->install()
-            || 'slack_webhook' !== get_option('website_watchdog_notification_method', 'email')
+            || 'cloud' !== get_option('website_watchdog_notification_method', 'email')
             || '' === (string) get_option('website_watchdog_api_key', '')) {
             return;
         }

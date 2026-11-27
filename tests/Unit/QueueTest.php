@@ -14,7 +14,7 @@ class QueueTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
+        WPState::$options['website_watchdog_notification_method'] = 'cloud';
     }
 
     public function test_add_appends_payloads(): void

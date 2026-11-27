@@ -19,6 +19,6 @@ abstract class TestCase extends BaseTestCase
         WPState::$options['website_watchdog_api_key'] = $key;
         WPState::$options['website_watchdog_api_key_verified'] = true;
         WPState::$options['website_watchdog_site_id'] = 'site_1';
-        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
+        WPState::$options['website_watchdog_notification_method'] = 'cloud';
     }
 }

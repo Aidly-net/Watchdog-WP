@@ -23,9 +23,10 @@ class NotificationSettingsTest extends TestCase
         $settings = new Settings();
 
         $this->assertSame('email', $settings->sanitize_notification_method('email'));
-        $this->assertSame('slack_webhook', $settings->sanitize_notification_method('slack_webhook'));
+        $this->assertSame('cloud', $settings->sanitize_notification_method('cloud'));
+        $this->assertSame('email', $settings->sanitize_notification_method('slack_webhook'));
         $this->assertSame('email', $settings->sanitize_notification_method('unsupported'));
-        $this->assertCount(1, WPState::$settings_errors);
+        $this->assertCount(2, WPState::$settings_errors);
     }
 
     public function test_email_recipient_is_required_and_validated_in_email_mode(): void

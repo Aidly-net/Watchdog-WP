@@ -14,7 +14,7 @@ class UsageTelemetryTest extends TestCase
         WPState::$options['website_watchdog_usage_telemetry'] = 1;
         WPState::$options['website_watchdog_api_key'] = 'private-api-key';
         WPState::$options['website_watchdog_api_key_verified'] = true;
-        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
+        WPState::$options['website_watchdog_notification_method'] = 'cloud';
 
         UsageTelemetry::send_report();
 

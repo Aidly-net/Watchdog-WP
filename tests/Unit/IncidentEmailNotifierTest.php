@@ -36,7 +36,7 @@ class IncidentEmailNotifierTest extends TestCase
 
         $this->assertFalse((new IncidentEmailNotifier())->send($incident));
         WPState::$options['website_watchdog_notification_email'] = 'alerts@example.com';
-        WPState::$options['website_watchdog_notification_method'] = 'slack_webhook';
+        WPState::$options['website_watchdog_notification_method'] = 'cloud';
         $this->assertFalse((new IncidentEmailNotifier())->send($incident));
         $this->assertSame([], WPState::$mail_calls);
     }

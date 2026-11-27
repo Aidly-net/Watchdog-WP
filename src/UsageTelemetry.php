@@ -86,7 +86,7 @@ class UsageTelemetry
             'wordpress_version' => sanitize_text_field((string) get_bloginfo('version')),
             'plugin_version' => WEBSITE_WATCHDOG_VERSION,
             'php_version' => PHP_VERSION,
-            'cloud_connected' => 'slack_webhook' === get_option('website_watchdog_notification_method', 'email')
+            'cloud_connected' => 'cloud' === get_option('website_watchdog_notification_method', 'email')
                 && '' !== (string) get_option('website_watchdog_api_key', '')
                 && (bool) get_option('website_watchdog_api_key_verified', false),
         ];

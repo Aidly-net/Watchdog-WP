@@ -216,7 +216,7 @@ class Settings
     public function sanitize_notification_method($value): string
     {
         $method = is_string($value) ? sanitize_key(wp_unslash($value)) : '';
-        if (in_array($method, ['email', 'slack_webhook'], true)) {
+        if (in_array($method, ['email', 'cloud'], true)) {
             return $method;
         }
 
@@ -266,7 +266,7 @@ class Settings
         $method = get_option('website_watchdog_notification_method', 'email');
         echo '<select id="website_watchdog_notification_method" name="website_watchdog_notification_method">';
         echo '<option value="email" ' . selected($method, 'email', false) . '>' . esc_html__('E-mail', 'website-watchdog') . '</option>';
-        echo '<option value="slack_webhook" ' . selected($method, 'slack_webhook', false) . '>' . esc_html__('Slack/Webhook', 'website-watchdog') . '</option>';
+        echo '<option value="cloud" ' . selected($method, 'cloud', false) . '>' . esc_html__('Cloud', 'website-watchdog') . '</option>';
         echo '</select>';
     }
 
@@ -308,7 +308,7 @@ class Settings
     public function render_section_intro(): void
     {
         echo '<p><strong>' . esc_html__('Connect to Website Watchdog Cloud', 'website-watchdog') . '</strong></p>';
-        echo '<p>' . esc_html__('Get remote uptime monitoring, SSL/domain expiration alerts, Slack/Webhook notifications, and centralized monitoring.', 'website-watchdog') . '</p>';
+        echo '<p>' . esc_html__('Get remote uptime monitoring, SSL/domain expiration alerts, and Cloud notifications.', 'website-watchdog') . '</p>';
         echo '<p><em>' . esc_html__('Your diagnostic data stays on your WordPress site.', 'website-watchdog') . '</em></p>';
     }
 
@@ -325,7 +325,7 @@ class Settings
     public function render_verification_notice(): void
     {
         if (!current_user_can('manage_options') || self::is_api_key_verified()
-            || 'slack_webhook' !== get_option('website_watchdog_notification_method', 'email')) {
+            || 'cloud' !== get_option('website_watchdog_notification_method', 'email')) {
             return;
         }
 
@@ -562,7 +562,7 @@ class Settings
             <h1><?php echo esc_html__('Website Watchdog Settings', 'website-watchdog'); ?></h1>
             <?php $active_tab = $this->get_active_tab(); ?>
             <?php $this->render_tabs($active_tab); ?>
-            <?php if ('slack_webhook' === get_option('website_watchdog_notification_method', 'email') && !self::is_api_key_verified() && '' !== get_option('website_watchdog_api_key', '')) : ?>
+            <?php if ('cloud' === get_option('website_watchdog_notification_method', 'email') && !self::is_api_key_verified() && '' !== get_option('website_watchdog_api_key', '')) : ?>
                 <div class="notice notice-warning inline">
                     <p><?php echo esc_html__('Warning: this API key is not verified. Events are paused until the key is corrected and re-verified.', 'website-watchdog'); ?></p>
                 </div>

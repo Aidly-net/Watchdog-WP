@@ -20,7 +20,7 @@ Website Watchdog is an independent software project operated by Aidly.net.
 - Limits incident source, URL and metadata to 2,002 JSON bytes each, and stack traces to 8,192 JSON bytes. Long traces retain the first 10 and last 5 frames. Incident messages use the remaining event budget.
 - Browser reports that exceed the 16 KiB endpoint limit are trimmed before sending, preserving the first 10 and last 5 stack entries when available.
 - In Cloud mode, attempts incident delivery immediately after saving with a 2-second HTTP timeout; a local outbox and WP-Cron retry failed updates in batches of 10.
-- Sends minimal incident e-mails through `wp_mail()` in E-mail mode, or uses Website Watchdog Cloud for Slack/Webhook notifications.
+- Sends minimal incident e-mails through `wp_mail()` in E-mail mode, or uses Website Watchdog Cloud for remote notifications.
 - Uses exponential backoff (30 s up to 1 h) for failed state-event deliveries.
 - Provides an administrator settings page, test event forms, and incident history.
 - Retains incidents for 30 days after last seen and changes for 30 days; removes local data on uninstall.
@@ -29,11 +29,10 @@ Website Watchdog is an independent software project operated by Aidly.net.
 
 - WordPress 6.5 or newer
 - PHP 7.4 or newer
-- An API key from the Website Watchdog portal when using Slack/Webhook mode
+- An API key from the Website Watchdog portal when using Cloud mode
 
-E-mail mode works locally with WordPress's configured mail delivery. Slack/Webhook
-notifications, remote uptime monitoring, and Cloud features require a Website
-Watchdog API key.
+E-mail mode works locally with WordPress's configured mail delivery. Cloud
+notifications and remote monitoring require a Website Watchdog API key.
 
 ## Installation
 
@@ -41,7 +40,7 @@ Watchdog API key.
 2. Copy the `Watchdog-WP` directory to `wp-content/plugins/`.
 3. Activate **Website Watchdog** from the WordPress Plugins screen.
 4. Open **Website Watchdog > Settings**.
-5. In **Notification**, keep E-mail selected and enter a recipient address, or select Slack/Webhook and enter an API key from <https://wd.aidly.net/>.
+5. In **Notification**, keep E-mail selected and enter a recipient address, or select Cloud and enter an API key from <https://wd.aidly.net/>.
 6. Save the settings and use the test forms to verify local capture.
 
 The public service pages are available at:
@@ -55,10 +54,10 @@ The public service pages are available at:
 Incident messages, sources, URLs, traces and custom event details stay in
 WordPress. In E-mail mode, new or reopened incidents send a generic message,
 severity, and a local administrator link through WordPress mail. In
-Slack/Webhook mode, the Cloud service receives opaque IDs, revisions, status,
+Cloud mode, the Cloud service receives opaque IDs, revisions, status,
 severity, the local link, and up to 20 approved plugin/theme changes for
 notification and synchronization. Site-change events and heartbeats are sent
-only in Slack/Webhook mode. Plugin and theme names and versions may reveal
+only in Cloud mode. Plugin and theme names and versions may reveal
 installed software. Optional anonymous version reports are sent only after
 consent and are independent of the notification method.
 

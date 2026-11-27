@@ -208,7 +208,7 @@ class Client
 
     private function cloud_delivery_enabled(): bool
     {
-        return 'slack_webhook' === get_option('website_watchdog_notification_method', 'email');
+        return 'cloud' === get_option('website_watchdog_notification_method', 'email');
     }
 
     private function is_legacy_incident(array $payload, string $endpoint): bool
