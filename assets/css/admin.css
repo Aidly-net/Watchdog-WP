@@ -195,6 +195,12 @@
     margin-top: 36px;
 }
 
+.website-watchdog-cont-tests {
+    background: white;
+    padding: 10px;
+    border-radius: 10px;
+}
+
 @media (max-width: 782px) {
     .watchdog-detail-grid {
         grid-template-columns: 1fr;

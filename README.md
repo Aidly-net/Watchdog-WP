@@ -17,12 +17,12 @@ Website Watchdog is an independent software project operated by Aidly.net.
 - Queues events locally when the service cannot be reached.
 - Limits the offline queue to 50 events or 256 KB, discarding the oldest events first.
 - Caps outgoing state events at 32 KB; incidents are grouped locally.
-- Limits incident source, URL and metadata to 2,002 JSON bytes each, and stack traces to 8,192 JSON bytes. Long traces retain the first 10 and last 5 frames. Incident messages use the remaining event budget.
+- Limits incident source, URL and metadata to 2,002 JSON bytes each, and stack traces to 8,192 JSON bytes. Long traces retain the first 10 and last 5 frames.
 - Browser reports that exceed the 16 KiB endpoint limit are trimmed before sending, preserving the first 10 and last 5 stack entries when available.
 - In Cloud mode, attempts incident delivery immediately after saving with a 2-second HTTP timeout; a local outbox and WP-Cron retry failed updates in batches of 10.
 - Sends minimal incident e-mails through `wp_mail()` in E-mail mode, or uses Website Watchdog Cloud for remote notifications.
 - Uses exponential backoff (30 s up to 1 h) for failed state-event deliveries.
-- Provides an administrator settings page, test event forms, and incident history.
+- Provides administrator-only incident and event history with detailed views, incident status and mute controls, and test forms.
 - Retains incidents for 30 days after last seen and changes for 30 days; removes local data on uninstall.
 
 ## Requirements
@@ -39,7 +39,7 @@ notifications and remote monitoring require a Website Watchdog API key.
 1. Download or clone this repository.
 2. Copy the `Watchdog-WP` directory to `wp-content/plugins/`.
 3. Activate **Website Watchdog** from the WordPress Plugins screen.
-4. Open **Website Watchdog > Settings**.
+4. Open **Website Watchdog** in the WordPress admin menu.
 5. In **Notification**, keep E-mail selected and enter a recipient address, or select Cloud and enter an API key from <https://wd.aidly.net/>.
 6. Save the settings and use the test forms to verify local capture.
 

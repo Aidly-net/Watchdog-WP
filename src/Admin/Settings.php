@@ -47,8 +47,10 @@ class Settings
 
         // WordPress updates every registered setting, including omitted disabled fields.
         // phpcs:ignore WordPress.Security.NonceVerification.Missing
-        if ($api_key === $old_value && isset($_POST['option_page']) && 'website_watchdog_settings_group' === $_POST['option_page']
-            && !isset($_POST['website_watchdog_api_key'])) {
+        if (
+            $api_key === $old_value && isset($_POST['option_page']) && 'website_watchdog_settings_group' === $_POST['option_page']
+            && !isset($_POST['website_watchdog_api_key'])
+        ) {
             return $api_key;
         }
 
@@ -324,8 +326,10 @@ class Settings
 
     public function render_verification_notice(): void
     {
-        if (!current_user_can('manage_options') || self::is_api_key_verified()
-            || 'cloud' !== get_option('website_watchdog_notification_method', 'email')) {
+        if (
+            !current_user_can('manage_options') || self::is_api_key_verified()
+            || 'cloud' !== get_option('website_watchdog_notification_method', 'email')
+        ) {
             return;
         }
 
@@ -454,7 +458,7 @@ class Settings
         <h2><?php echo esc_html__('Send Test Data', 'website-watchdog'); ?></h2>
         <p><?php echo esc_html__('Use these forms to record test events and incidents locally. Incident notifications require a verified API key.', 'website-watchdog'); ?></p>
         <h3><?php echo esc_html__('Custom Event', 'website-watchdog'); ?></h3>
-        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="website-watchdog-cont-tests">
             <input type="hidden" name="action" value="website_watchdog_test_event" />
             <?php wp_nonce_field('website_watchdog_test_event_nonce'); ?>
             <table class="form-table" role="presentation">
@@ -471,10 +475,10 @@ class Settings
                     <td><textarea id="website_watchdog_event_message" name="event_message" rows="3" class="large-text" required></textarea></td>
                 </tr>
             </table>
-            <?php submit_button(__('Send Test Event', 'website-watchdog'), 'secondary', 'submit', false); ?>
+            <?php submit_button(__('Send Test Event', 'website-watchdog'), 'primary', 'submit', false); ?>
         </form>
         <h3><?php echo esc_html__('Custom Incident', 'website-watchdog'); ?></h3>
-        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="website-watchdog-cont-tests">
             <input type="hidden" name="action" value="website_watchdog_test_incident" />
             <?php wp_nonce_field('website_watchdog_test_incident_nonce'); ?>
             <table class="form-table" role="presentation">
@@ -497,26 +501,28 @@ class Settings
                     <td><textarea id="website_watchdog_incident_details" name="incident_details" rows="3" class="large-text" required></textarea></td>
                 </tr>
             </table>
-            <?php submit_button(__('Send Test Incident', 'website-watchdog'), 'secondary', 'submit', false); ?>
+            <?php submit_button(__('Send Test Incident', 'website-watchdog'), 'primary', 'submit', false); ?>
         </form>
         <h3><?php echo esc_html__('PHP Error Handlers', 'website-watchdog'); ?></h3>
-        <p><?php echo esc_html__('These tests invoke the handlers with simulated errors and do not cause a real PHP fatal error. Incidents are stored locally; notifications require a verified API key.', 'website-watchdog'); ?></p>
-        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="website_watchdog_test_error_handler" />
-                <?php wp_nonce_field('website_watchdog_test_error_handler_nonce'); ?>
-                <?php submit_button(__('Test PHP Error Handler', 'website-watchdog'), 'secondary', 'submit', false); ?>
-            </form>
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="website_watchdog_test_exception_handler" />
-                <?php wp_nonce_field('website_watchdog_test_exception_handler_nonce'); ?>
-                <?php submit_button(__('Test Exception Handler', 'website-watchdog'), 'secondary', 'submit', false); ?>
-            </form>
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="website_watchdog_test_shutdown_handler" />
-                <?php wp_nonce_field('website_watchdog_test_shutdown_handler_nonce'); ?>
-                <?php submit_button(__('Test Shutdown Handler', 'website-watchdog'), 'secondary', 'submit', false); ?>
-            </form>
+        <div class="website-watchdog-cont-tests">
+            <p><?php echo esc_html__('These tests invoke the handlers with simulated errors and do not cause a real PHP fatal error. Incidents are stored locally; notifications require a verified API key.', 'website-watchdog'); ?></p>
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="website_watchdog_test_error_handler" />
+                    <?php wp_nonce_field('website_watchdog_test_error_handler_nonce'); ?>
+                    <?php submit_button(__('Test PHP Error Handler', 'website-watchdog'), 'primary', 'submit', false); ?>
+                </form>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="website_watchdog_test_exception_handler" />
+                    <?php wp_nonce_field('website_watchdog_test_exception_handler_nonce'); ?>
+                    <?php submit_button(__('Test Exception Handler', 'website-watchdog'), 'primary', 'submit', false); ?>
+                </form>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="website_watchdog_test_shutdown_handler" />
+                    <?php wp_nonce_field('website_watchdog_test_shutdown_handler_nonce'); ?>
+                    <?php submit_button(__('Test Shutdown Handler', 'website-watchdog'), 'primary', 'submit', false); ?>
+                </form>
+            </div>
         </div>
     <?php
     }

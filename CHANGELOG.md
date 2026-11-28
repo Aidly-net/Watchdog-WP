@@ -22,6 +22,12 @@
 - Change custom event payload.
 - Set a limit for each event field to fit the 32KB limit
 
+## v1.4.0
+- The plugin now can run as standalone installation with e-mail alerts via WordPress mail for new or reopened incidents, SaaS signup and API key are optional for extended Cloud services (Slack/Webhook notifications, Uptime alert, SSL/Domain exiration)
+- Store and group incidents locally, correlate them with recent changes, and add incident and event history views.
+- Keep incident details and custom events local; send only minimal incident notifications to Cloud.
+- Attempt Cloud incident delivery immediately, with an outbox and WP-Cron retries.
+
 ### Community contributors
 - Special thanks to [PeepSoWP](https://www.reddit.com/user/PeepSoWP/) for valuable feedback and suggestions that helped improve this release.
 
